@@ -112,12 +112,6 @@ export const allocationMeta: Array<{
   },
 ]
 
-export const auditorQueue = [
-  { project: 'Seed Mint', owner: '0x71b8...55a1', score: 92, state: '通过' },
-  { project: 'Orchard Core', owner: '0xa329...09d5', score: 78, state: '复核中' },
-  { project: 'Apple Vault', owner: '0x469e...78ff', score: 86, state: '待签名' },
-]
-
 export const paymentTokens = [
   {
     label: 'BNB',

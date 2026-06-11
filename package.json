@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "contracts:compile": "hardhat compile",
     "contracts:test": "hardhat test",
-    "contracts:deploy": "hardhat run scripts/deploy-factory.ts --network bsc"
+    "contracts:deploy": "hardhat run scripts/deploy-factory.ts --network bsc",
+    "contracts:deploy:audit": "hardhat run scripts/deploy-audit-registry.ts --network bsc"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.13",

@@ -33,6 +33,14 @@
   - Supports pause, receiver update, and whitelist controls.
   - Ownership belongs to the project creator, not the receiver wallet.
 
+- `AppleAuditRegistry`
+  - Separate on-chain registry for the auditor system.
+  - Wallets call `applyAuditor(profileUri)` to submit an on-chain auditor application.
+  - Registry owner approves or suspends auditors through `setAuditorStatus(auditor, status)`.
+  - Approved auditors call `submitReview(projectToken, score, riskLevel, reportUri)` to publish project reviews.
+  - Stores reviewer wallet, project token, score, risk level, report URI, and update time.
+  - Supports reading all reviews for a project through `getProjectReviews(projectToken)`.
+
 ## Whitelist Design
 
 Whitelist mode is controlled per project vault.
@@ -81,16 +89,44 @@ The UI fields map to contract fields as follows:
 
 The split total can be lower than 100%. The remaining unallocated part of a charged tax goes to the project receiver. The split total cannot exceed 100%, and buy/sell tax cannot exceed 25%.
 
+## Auditor Design
+
+The auditor page is backed by `AppleAuditRegistry`; it does not show fake audit queues.
+
+Common launchpads usually handle review credibility in one of three ways:
+
+- A centralized admin marks trusted auditors and audited projects.
+- A trusted signer signs off-chain reports, and the frontend verifies the signature.
+- A registry contract stores approved auditors and their project attestations.
+
+This project uses the registry-contract approach:
+
+- Anyone can apply as an auditor by writing a profile URI on-chain.
+- Only the registry owner can approve or suspend auditors.
+- Only approved auditors can submit project reviews.
+- Re-submitting a review for the same project updates the existing review instead of duplicating counts.
+- Report content can live on IPFS, GitHub, Notion, a website, or another public URI; the contract stores the URI.
+
+Frontend integration:
+
+- Set `VITE_AUDIT_REGISTRY_ADDRESS` after deploying `AppleAuditRegistry`.
+- If the address is missing, the page shows a configuration warning instead of fake data.
+- If the connected wallet is the registry owner, the frontend shows approve/suspend controls.
+- If the connected wallet is an approved auditor, the frontend enables project-review submission.
+
+The Swap page and Swap navigation were removed. There is no placeholder swap module in the UI.
+
 ## Deployment Flow
 
 1. Deploy `AppleLaunchFactory(feeRecipient, creationFee)`.
-2. Set `VITE_LAUNCHPAD_FACTORY_ADDRESS` to the deployed factory address.
-3. User connects wallet and calls `createLaunch`.
-4. Factory deploys token and vault.
-5. Factory transfers all token supply into the vault.
-6. Token ownership goes to the project creator.
-7. Vault ownership belongs to the project creator.
-8. If whitelist mode is enabled, the project creator sets whitelist allowances before mint starts.
+2. Deploy `AppleAuditRegistry`.
+3. Set `VITE_LAUNCHPAD_FACTORY_ADDRESS` and `VITE_AUDIT_REGISTRY_ADDRESS`.
+4. User connects wallet and calls `createLaunch`.
+5. Factory deploys token and vault.
+6. Factory transfers all token supply into the vault.
+7. Token ownership goes to the project creator.
+8. Vault ownership belongs to the project creator.
+9. If whitelist mode is enabled, the project creator sets whitelist allowances before mint starts.
 
 The current UI only offers BNB and USDT for mint payments. USD1 was removed from the selectable payment-token list. Contracts still support any valid ERC20 payment token if called directly.
 
@@ -117,3 +153,4 @@ Current tests cover:
 - Only the creator-owned vault can update whitelist allowance.
 - Creator/template indexes and paged project reads are populated.
 - Sell tax routes LP to the black hole, burns the burn split, and routes marketing/dividend splits correctly.
+- Auditor registry covers application, owner approval/suspension, approved-auditor-only review submission, review updates, and project review reads.
