@@ -1,16 +1,21 @@
 {
   "network": "bsc",
   "chainId": 56,
-  "factory": "0x949623FD22EA82Ef0B3FdA71F93fb72C3652d4b3",
+  "factory": "0x4d966290C9482322a3829919bFCefb5103408542",
+  "tokenDeployer": "0xea073eA6a5BaC1142c7AB8155CcC6E696947d69F",
+  "vaultDeployer": "0x0D4194926945d73928eed2F3DcbeF3A324102F85",
+  "liquidityRouter": "0x10ED43C718714eb63d5aA57B78B54704E256024E",
   "auditRegistry": "0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084",
   "creationFeeWei": "5000000000000000",
   "creationFeeBnb": "0.005",
-  "deploymentTx": "0x47e9946f5cde90ee40b4bcbec8608babd4caaea3c6f0e54e00ec10df06a985f7",
+  "deploymentTx": "0x1d6f4dba602c0e332b637d43e1c26fa9a3011726330d7e4fce5a414282e5f874",
   "auditRegistryDeploymentTx": "0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a",
-  "blockNumber": 103633685,
+  "blockNumber": 103643692,
   "auditRegistryBlockNumber": 103613614,
-  "factoryBscScan": "https://bscscan.com/address/0x949623FD22EA82Ef0B3FdA71F93fb72C3652d4b3#code",
+  "factoryBscScan": "https://bscscan.com/address/0x4d966290C9482322a3829919bFCefb5103408542#code",
+  "tokenDeployerBscScan": "https://bscscan.com/address/0xea073eA6a5BaC1142c7AB8155CcC6E696947d69F#code",
+  "vaultDeployerBscScan": "https://bscscan.com/address/0x0D4194926945d73928eed2F3DcbeF3A324102F85#code",
   "auditRegistryBscScan": "https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code",
-  "previousFactory": "0x2a675D757a13bbA48A088dA5af72E8c53F445Ea1",
-  "previousDeploymentTx": "0x6efc9277b24e833b8ad67350b23899ecf4ba7c5d24ca94ada7f213e59373efc8"
+  "previousFactory": "0x949623FD22EA82Ef0B3FdA71F93fb72C3652d4b3",
+  "previousDeploymentTx": "0x47e9946f5cde90ee40b4bcbec8608babd4caaea3c6f0e54e00ec10df06a985f7"
 }

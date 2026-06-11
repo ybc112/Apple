@@ -1007,11 +1007,13 @@ a {
 
 .whitelist-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px;
+  grid-template-columns: minmax(0, 1fr) 124px;
   gap: 8px;
+  align-items: stretch;
 }
 
-.whitelist-fields input {
+.whitelist-fields input,
+.whitelist-fields textarea {
   min-width: 0;
   min-height: 38px;
   border: 1px solid rgba(104, 164, 154, 0.22);
@@ -1022,9 +1024,22 @@ a {
   background: rgba(0, 0, 0, 0.18);
 }
 
-.whitelist-fields input:focus {
+.whitelist-fields textarea {
+  min-height: 116px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.whitelist-fields input:focus,
+.whitelist-fields textarea:focus {
   border-color: rgba(141, 247, 196, 0.48);
   box-shadow: 0 0 0 3px rgba(141, 247, 196, 0.08);
+}
+
+.whitelist-manager > em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
 }
 
 .project-skeleton {

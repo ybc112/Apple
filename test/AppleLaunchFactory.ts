@@ -13,12 +13,28 @@ describe("AppleLaunchFactory", function () {
   async function deployFactory() {
     const [owner, creator, buyer, pair, dividendReceiver] = await ethers.getSigners();
     const creationFee = ethers.parseEther("0.005");
+    const router = await ethers.deployContract("MockPancakeRouter");
+    const tokenDeployer = await ethers.deployContract("AppleTokenDeployer");
+    const vaultDeployer = await ethers.deployContract("AppleMintVaultDeployer");
     const factory = await ethers.deployContract("AppleLaunchFactory", [
       owner.address,
       creationFee,
+      await router.getAddress(),
+      await tokenDeployer.getAddress(),
+      await vaultDeployer.getAddress(),
     ]);
+    await tokenDeployer.setFactory(await factory.getAddress());
+    await vaultDeployer.setFactory(await factory.getAddress());
 
-    return { owner, creator, buyer, pair, dividendReceiver, creationFee, factory };
+    return { owner, creator, buyer, pair, dividendReceiver, creationFee, factory, router };
+  }
+
+  async function getLiquidityPair(router: any, tokenAddress: string) {
+    const pancakeFactory = await ethers.getContractAt(
+      "MockPancakeFactory",
+      await router.factory(),
+    );
+    return pancakeFactory.getPair(tokenAddress, await router.WETH());
   }
 
   function launchParams(receiver: string) {
@@ -58,6 +74,7 @@ describe("AppleLaunchFactory", function () {
     const tokenAddress = await factory.allTokens(0);
     const project = await factory.projects(tokenAddress);
     const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
 
     expect(project.creator).to.equal(creator.address);
     expect(project.receiver).to.equal(creator.address);
@@ -71,6 +88,8 @@ describe("AppleLaunchFactory", function () {
     expect(await token.owner()).to.equal(creator.address);
     expect(await token.rewardToken()).to.equal(await factory.DEFAULT_REWARD_TOKEN());
     expect(await token.balanceOf(project.vault)).to.equal(params.totalSupply);
+    expect(await vault.tokensForSale()).to.equal(params.totalSupply / 2n);
+    expect(await vault.liquidityTokenReserve()).to.equal(params.totalSupply / 2n);
     expect(await factory.creatorTokensLength(creator.address)).to.equal(1n);
     expect(await factory.creatorTokenAt(creator.address, 0)).to.equal(tokenAddress);
     expect(await factory.templateTokensLength(params.templateId)).to.equal(1n);
@@ -82,7 +101,7 @@ describe("AppleLaunchFactory", function () {
   });
 
   it("lets users mint real ERC20 balances from the vault", async function () {
-    const { creator, buyer, creationFee, factory } = await deployFactory();
+    const { creator, buyer, creationFee, factory, router } = await deployFactory();
     const params = launchParams(creator.address);
 
     await factory
@@ -95,10 +114,12 @@ describe("AppleLaunchFactory", function () {
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
 
     await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
+    const pairAddress = await getLiquidityPair(router, tokenAddress);
 
     expect(await vault.mintedCount()).to.equal(2n);
-    expect(await token.balanceOf(buyer.address)).to.equal((params.totalSupply / params.mintCount) * 2n);
-    expect(await ethers.provider.getBalance(project.vault)).to.equal(params.mintPrice * 2n);
+    expect(await token.balanceOf(buyer.address)).to.equal((await vault.tokensPerMint()) * 2n);
+    expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
+    expect(await ethers.provider.getBalance(pairAddress)).to.equal(params.mintPrice * 2n);
     expect(await vault.finalized()).to.equal(false);
   });
 
@@ -116,7 +137,7 @@ describe("AppleLaunchFactory", function () {
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
     const quantity = 2n;
     const cost = params.mintPrice * quantity;
-    const tokenAmount = (params.totalSupply / params.mintCount) * quantity;
+    const tokenAmount = (await vault.tokensPerMint()) * quantity;
 
     await vault.connect(buyer).mint(quantity, { value: cost });
 
@@ -143,8 +164,8 @@ describe("AppleLaunchFactory", function () {
     expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
   });
 
-  it("finalizes the launch, enables trading, and pays the receiver when sold out", async function () {
-    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
+  it("finalizes the launch, enables trading, adds Pancake liquidity, and burns LP when sold out", async function () {
+    const { creator, buyer, dividendReceiver, creationFee, factory, router } = await deployFactory();
     const params = {
       ...launchParams(dividendReceiver.address),
       mintCount: 2n,
@@ -164,12 +185,19 @@ describe("AppleLaunchFactory", function () {
     expect(await token.tradingEnabled()).to.equal(false);
     await vault.connect(buyer).mint(params.mintCount, { value: cost });
 
+    const pairAddress = await getLiquidityPair(router, tokenAddress);
+    const pair = await ethers.getContractAt("MockPancakePair", pairAddress);
+
     expect(await vault.finalized()).to.equal(true);
     expect(await token.tradingEnabled()).to.equal(true);
+    expect(await token.automatedMarketMakerPairs(pairAddress)).to.equal(true);
     expect(await token.owner()).to.equal(await token.LP_BLACK_HOLE());
     expect(await vault.owner()).to.equal(await vault.PERMISSION_BLACK_HOLE());
     expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
-    expect((await ethers.provider.getBalance(dividendReceiver.address)) - receiverBefore).to.equal(cost);
+    expect((await ethers.provider.getBalance(dividendReceiver.address)) - receiverBefore).to.equal(0n);
+    expect(await token.balanceOf(pairAddress)).to.equal(await vault.liquidityAddedToken());
+    expect(await ethers.provider.getBalance(pairAddress)).to.equal(cost);
+    expect(await pair.balanceOf(await vault.PERMISSION_BLACK_HOLE())).to.equal(cost);
 
     await increaseTime(24 * 60 * 60 + 1);
 
@@ -280,7 +308,7 @@ describe("AppleLaunchFactory", function () {
     const project = await factory.projects(tokenAddress);
     const token = await ethers.getContractAt("AppleToken", tokenAddress);
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
-    const tokensPerMint = params.totalSupply / params.mintCount;
+    const tokensPerMint = await vault.tokensPerMint();
 
     await token.connect(creator).setAutomatedMarketMakerPair(pair.address, true);
     await vault.connect(buyer).mint(1n, { value: params.mintPrice });
@@ -371,7 +399,7 @@ describe("AppleLaunchFactory", function () {
     await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
 
     expect(await vault.whitelistRemaining(buyer.address)).to.equal(0n);
-    expect(await token.balanceOf(buyer.address)).to.equal((params.totalSupply / params.mintCount) * 2n);
+    expect(await token.balanceOf(buyer.address)).to.equal((await vault.tokensPerMint()) * 2n);
 
     let overLimit = false;
     try {

@@ -39,7 +39,8 @@ import {
   isLaunchpadConfigured,
   launchpadConfig,
   mintLaunchProject,
-  setProjectWhitelistAllowance,
+  setProjectWhitelistAllowances,
+  type WhitelistAllowanceEntry,
   waitForTransactionReceipt,
 } from './contracts/launchpad'
 import {
@@ -212,10 +213,11 @@ const copy = {
       quota: (whitelistMinted: string, whitelistTotal: string, publicMinted: string, publicTotal: string) =>
         `白名单 ${whitelistMinted}/${whitelistTotal} · 公开 ${publicMinted}/${publicTotal}`,
       whitelistManage: '添加白名单',
-      whitelistAddress: '白名单钱包地址',
-      whitelistAllowance: '可 mint 次数',
-      whitelistSubmit: '保存额度',
+      whitelistAddress: '粘贴白名单地址，每行一个，也支持空格或逗号分隔',
+      whitelistAllowance: '统一可 mint 次数',
+      whitelistSubmit: '批量保存',
       whitelistPending: '等待确认',
+      whitelistBatchHint: '单次最多 200 个地址，适合手机一次粘贴 100 多个地址。',
       mint: 'Mint',
       mintQuantity: 'Mint 数量',
       mintCost: (amount: string) => `合计 ${amount}`,
@@ -500,10 +502,11 @@ const copy = {
       quota: (whitelistMinted: string, whitelistTotal: string, publicMinted: string, publicTotal: string) =>
         `Whitelist ${whitelistMinted}/${whitelistTotal} · Public ${publicMinted}/${publicTotal}`,
       whitelistManage: 'Add whitelist',
-      whitelistAddress: 'Whitelist wallet',
-      whitelistAllowance: 'Mint allowance',
-      whitelistSubmit: 'Save allowance',
+      whitelistAddress: 'Paste whitelist addresses, one per line. Spaces and commas also work.',
+      whitelistAllowance: 'Mint allowance each',
+      whitelistSubmit: 'Batch save',
       whitelistPending: 'Waiting',
+      whitelistBatchHint: 'Up to 200 addresses per transaction. Large mobile pastes are supported.',
       mint: 'Mint',
       mintQuantity: 'Mint quantity',
       mintCost: (amount: string) => `Total ${amount}`,
@@ -721,9 +724,9 @@ const templateTranslations: Record<Language, Partial<Record<TemplateId, Partial<
     buyback: {
       name: 'Buyback Core',
       tag: 'Flow',
-      summary: 'Maps tax splits to marketing, LP black hole, holder rewards, and burn for longer-running projects.',
+      summary: 'Maps tax splits to marketing, launch LP locking, holder rewards, and burn for longer-running projects.',
       bestFor: 'Tax-based mechanics, ongoing operations, buyback narratives',
-      checks: ['Buy/sell tax', 'Marketing split', 'LP black hole', 'Receiver wallet'],
+      checks: ['Buy/sell tax', 'Marketing split', 'Launch LP lock', 'Receiver wallet'],
     },
     nftReward: {
       name: 'Reward Grove',
@@ -738,13 +741,13 @@ const templateTranslations: Record<Language, Partial<Record<TemplateId, Partial<
 const allocationTranslations: Record<Language, Record<AllocationKey, { label: string; hint: string }>> = {
   zh: {
     marketing: { label: '营销', hint: '进入接收钱包' },
-    liquidity: { label: '回流', hint: 'LP 进入黑洞' },
+    liquidity: { label: '回流', hint: '开盘锁 LP' },
     rewards: { label: '持币分红', hint: '进入分红池' },
     burn: { label: '销毁', hint: '减少供应' },
   },
   en: {
     marketing: { label: 'Marketing', hint: 'sent to receiver' },
-    liquidity: { label: 'Buyback', hint: 'LP sent to black hole' },
+    liquidity: { label: 'Buyback', hint: 'LP locked on launch' },
     rewards: { label: 'Holder rewards', hint: 'sent to dividend pool' },
     burn: { label: 'Burn', hint: 'reduces supply' },
   },
@@ -1113,7 +1116,7 @@ function App() {
     }
   }
 
-  const submitWhitelistAllowance = async (project: LaunchProject, account: string, allowance: string) => {
+  const submitWhitelistAllowances = async (project: LaunchProject, entries: WhitelistAllowanceEntry[]) => {
     const provider = getProvider()
     if (!provider) {
       setNotice({ kind: 'error', message: text.wallet.noProviderForTx })
@@ -1138,7 +1141,7 @@ function App() {
         })
       }
 
-      const result = await setProjectWhitelistAllowance(provider, project.vault, account, allowance, language)
+      const result = await setProjectWhitelistAllowances(provider, project.vault, entries, language)
       setNotice({ kind: 'info', message: text.notice.whitelistSubmitted(shortHash(result.hash)) })
       await waitForTransactionReceipt(provider, result.hash, 120_000, language)
       setNotice({ kind: 'success', message: text.notice.whitelistConfirmed })
@@ -1413,7 +1416,7 @@ function App() {
           setProjectQuery={setProjectQuery}
           submitProjectMint={submitProjectMint}
           submitProjectRefund={submitProjectRefund}
-          submitWhitelistAllowance={submitWhitelistAllowance}
+          submitWhitelistAllowances={submitWhitelistAllowances}
           text={text}
           wallet={wallet}
         />
@@ -1613,7 +1616,7 @@ function HomePage({
   setProjectQuery,
   submitProjectMint,
   submitProjectRefund,
-  submitWhitelistAllowance,
+  submitWhitelistAllowances,
   text,
   wallet,
 }: {
@@ -1628,7 +1631,7 @@ function HomePage({
   setProjectQuery: (value: string) => void
   submitProjectMint: (project: LaunchProject, quantity: string) => Promise<void>
   submitProjectRefund: (project: LaunchProject) => Promise<void>
-  submitWhitelistAllowance: (project: LaunchProject, account: string, allowance: string) => Promise<void>
+  submitWhitelistAllowances: (project: LaunchProject, entries: WhitelistAllowanceEntry[]) => Promise<void>
   text: (typeof copy)[Language]
   wallet: WalletState
 }) {
@@ -1786,7 +1789,7 @@ function HomePage({
                 project={project}
                 submitProjectMint={submitProjectMint}
                 submitProjectRefund={submitProjectRefund}
-                submitWhitelistAllowance={submitWhitelistAllowance}
+                submitWhitelistAllowances={submitWhitelistAllowances}
                 text={text}
                 wallet={wallet}
               />
@@ -1850,7 +1853,7 @@ function ProjectCard({
   project,
   submitProjectMint,
   submitProjectRefund,
-  submitWhitelistAllowance,
+  submitWhitelistAllowances,
   text,
   wallet,
 }: {
@@ -1860,15 +1863,16 @@ function ProjectCard({
   project: LaunchProject
   submitProjectMint: (project: LaunchProject, quantity: string) => Promise<void>
   submitProjectRefund: (project: LaunchProject) => Promise<void>
-  submitWhitelistAllowance: (project: LaunchProject, account: string, allowance: string) => Promise<void>
+  submitWhitelistAllowances: (project: LaunchProject, entries: WhitelistAllowanceEntry[]) => Promise<void>
   text: (typeof copy)[Language]
   wallet: WalletState
 }) {
   const [copied, setCopied] = useState(false)
   const [mintQuantity, setMintQuantity] = useState('1')
   const [mintPending, setMintPending] = useState(false)
-  const [whitelistAccount, setWhitelistAccount] = useState('')
+  const [whitelistBatch, setWhitelistBatch] = useState('')
   const [whitelistAllowance, setWhitelistAllowance] = useState('1')
+  const [whitelistError, setWhitelistError] = useState('')
   const [whitelistSaving, setWhitelistSaving] = useState(false)
   const [refundPending, setRefundPending] = useState(false)
   const progress = Math.min(100, Math.max(0, project.progress))
@@ -2052,9 +2056,12 @@ function ProjectCard({
           onSubmit={async (event) => {
             event.preventDefault()
             setWhitelistSaving(true)
+            setWhitelistError('')
             try {
-              await submitWhitelistAllowance(project, whitelistAccount, whitelistAllowance)
-              setWhitelistAccount('')
+              await submitWhitelistAllowances(project, parseWhitelistBatch(whitelistBatch, whitelistAllowance, language))
+              setWhitelistBatch('')
+            } catch (error) {
+              setWhitelistError(readProviderErrorMessage(error))
             } finally {
               setWhitelistSaving(false)
             }
@@ -2065,10 +2072,10 @@ function ProjectCard({
             {text.projects.whitelistManage}
           </strong>
           <div className="whitelist-fields">
-            <input
+            <textarea
               placeholder={text.projects.whitelistAddress}
-              value={whitelistAccount}
-              onChange={(event) => setWhitelistAccount(event.target.value)}
+              value={whitelistBatch}
+              onChange={(event) => setWhitelistBatch(event.target.value)}
             />
             <input
               inputMode="numeric"
@@ -2079,6 +2086,8 @@ function ProjectCard({
               onChange={(event) => setWhitelistAllowance(event.target.value)}
             />
           </div>
+          <em>{text.projects.whitelistBatchHint}</em>
+          {whitelistError && <small className="form-error">{whitelistError}</small>}
           <button type="submit" disabled={whitelistSaving}>
             {whitelistSaving ? text.projects.whitelistPending : text.projects.whitelistSubmit}
           </button>
@@ -3389,6 +3398,32 @@ function normalizeMintInput(value: string) {
   const digits = value.replace(/\D/g, '').replace(/^0+(?=\d)/, '')
 
   return digits || '1'
+}
+
+function parseWhitelistBatch(
+  value: string,
+  allowance: string,
+  language: Language,
+): WhitelistAllowanceEntry[] {
+  const normalizedAllowance = normalizeMintInput(allowance)
+  const matches = value.match(/0x[a-fA-F0-9]{40}/g) ?? []
+  const uniqueAccounts = new Map<string, string>()
+
+  matches.forEach((account) => {
+    uniqueAccounts.set(account.toLowerCase(), account)
+  })
+
+  if (uniqueAccounts.size === 0) {
+    throw new Error(language === 'zh' ? '请至少粘贴一个有效的钱包地址。' : 'Paste at least one valid wallet address.')
+  }
+  if (uniqueAccounts.size > 200) {
+    throw new Error(language === 'zh' ? '单次最多提交 200 个白名单地址。' : 'Submit no more than 200 whitelist addresses at once.')
+  }
+
+  return [...uniqueAccounts.values()].map((account) => ({
+    account,
+    allowance: normalizedAllowance,
+  }))
 }
 
 function getMintCostWei(project: LaunchProject, quantity: string) {

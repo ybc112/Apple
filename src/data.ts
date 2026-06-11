@@ -101,7 +101,7 @@ export const allocationMeta: Array<{
   {
     key: 'liquidity',
     label: '回流',
-    hint: 'LP 进入黑洞',
+    hint: '开盘锁 LP',
     color: '#7dd3fc',
   },
   {

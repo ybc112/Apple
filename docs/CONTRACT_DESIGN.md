@@ -4,7 +4,7 @@
 
 - `AppleLaunchFactory`
   - Collects the launch creation fee.
-  - Deploys one `AppleToken` and one `AppleMintVault` for every project.
+  - Coordinates `AppleTokenDeployer` and `AppleMintVaultDeployer` to deploy one token and one vault for every project.
   - Stores project metadata, token address, vault address, mint price, mint count, payment token, receiver, template id, whitelist mode, reward config, and tax split config.
   - Indexes projects by creator and template id for deployment history and template-based lists.
   - Exposes paged project reads through `getProjects(offset, limit)`.
@@ -33,9 +33,12 @@
   - Holds the full token supply allocated for public mint.
   - Handles native BNB minting and ERC20 payment-token minting.
   - Escrows mint payment during the 24-hour launch window.
+  - For BNB mint projects, reserves 50% of supply for sale mints and 50% for Pancake V2 liquidity.
+  - Every successful BNB mint immediately adds that mint's BNB plus its matching token reserve into Pancake V2 liquidity.
+  - LP tokens are held by the vault during the launch window so failed launches can remove LP and refund buyers.
   - Automatically finalizes the launch when `mintedCount == totalMints`.
-  - On finalization, enables token trading and pays escrowed mint funds to the project receiver.
-  - If the launch is not sold out after 24 hours, buyers can refund by returning their minted tokens to the vault.
+  - On finalization, transfers remaining LP to the black-hole address, marks the pair as an AMM pair, and enables token trading.
+  - If the launch is not sold out after 24 hours, buyers can refund by returning their minted tokens; the vault removes the wallet's LP share and refunds recovered BNB.
   - Tracks `mintedCount`, whitelist minted count, public minted count, per-wallet minted amount, and progress.
   - Separates whitelist quota from public quota through `whitelistMintLimit` and `publicMintLimit`.
   - Supports receiver update and whitelist controls.
@@ -87,23 +90,27 @@ Only the vault owner can update whitelist allowances. The factory sets the vault
 - The factory owner can update `creationFee` and `feeRecipient`.
 - Mint payments are separate from the factory fee.
 - For buy/sell tax, the platform receives 10% of the collected tax amount. For example, a 10% sell tax routes 1% of the trade amount to the platform and distributes the remaining 9% by the project tax split.
-- Mint payments stay in the project's vault until the launch sells out.
-- If the launch sells out, the vault enables token trading and transfers escrowed mint payments to the project receiver.
+- BNB mint payments are added to Pancake V2 liquidity immediately per mint; LP stays in the vault until sellout.
+- ERC20 mint payments stay in the project's vault until the launch sells out.
+- If a BNB launch sells out, the vault locks LP in the black hole and enables token trading.
+- If an ERC20-paid launch sells out, the vault enables token trading and transfers escrowed payment tokens to the project receiver.
 - If the launch is not sold out after 24 hours, buyers can call `claimRefund()` after approving the vault to take back their minted launch tokens.
 
 ## Refund And Auto-Trading Policy
 
 - `refundDeadline` is set to `block.timestamp + 24 hours` when the vault is deployed.
 - `mint()` is available only before `refundDeadline` and only while the launch is not finalized.
-- When the final mint slot is filled, the vault calls `AppleToken.finalizeLaunch()` and sends escrowed payment to the receiver.
+- For BNB launches, each mint calls Pancake V2 `addLiquidityETH` with that mint's BNB and matching reserve tokens.
+- When the final mint slot is filled, the vault sends remaining LP to the black-hole address and calls `AppleToken.finalizeLaunch(pair)`.
 - `AppleToken.finalizeLaunch()` can only be called by the assigned vault.
-- `AppleToken.finalizeLaunch()` enables trading and transfers token ownership to the black-hole address.
+- `AppleToken.finalizeLaunch(pair)` marks the liquidity pair as an AMM pair, enables trading, and transfers token ownership to the black-hole address.
 - The vault transfers its own ownership to the black-hole address in the same finalization flow.
 - Before finalization, regular transfers between non-exempt addresses revert with `TradingLocked`.
 - After finalization, trading stays enabled; the auditor registry has no function that can pause or stop token trading.
 - After finalization, the project creator cannot change taxes, receivers, tax exemptions, pair flags, whitelist settings, or the vault receiver.
 - `claimRefund()` is available only after `refundDeadline`, only if the launch is not finalized, and only for wallets with a paid mint balance.
-- Refund claims zero the wallet's mint/payment accounting, decrement active mint counters, transfer the minted launch tokens back to the vault, and return the user's BNB/ERC20 payment.
+- BNB refund claims zero the wallet's mint/payment accounting, decrement active mint counters, transfer minted launch tokens back to the vault, remove the wallet's LP share, and return recovered BNB.
+- ERC20 refund claims return the user's escrowed ERC20 payment.
 
 ## Tax Split Policy
 
@@ -158,31 +165,39 @@ The Swap page is a real frontend integration with PancakeSwap V2 Router on BNB C
 
 ## Deployment Flow
 
-1. Deploy `AppleLaunchFactory(feeRecipient, creationFee)`.
-2. Deploy `AppleAuditRegistry`.
-3. Set `VITE_LAUNCHPAD_FACTORY_ADDRESS` and `VITE_AUDIT_REGISTRY_ADDRESS`.
-4. User connects wallet and calls `createLaunch`.
-5. Factory deploys token and vault.
-6. Factory transfers all token supply into the vault.
-7. Token ownership goes to the project creator.
-8. Vault ownership belongs to the project creator during the launch window.
-9. If whitelist mode is enabled, the project creator sets whitelist allowances before mint starts.
-10. Buyers mint from the vault during the 24-hour window.
-11. If sold out, the vault automatically enables trading, pays the receiver, and sends token/vault ownership to the black-hole address.
-12. If not sold out after 24 hours, buyers can approve the vault and call `claimRefund()`.
+1. Deploy `AppleTokenDeployer` and `AppleMintVaultDeployer`.
+2. Deploy `AppleLaunchFactory(feeRecipient, creationFee, pancakeRouter, tokenDeployer, vaultDeployer)`.
+3. Bind both deployers to the Factory with `setFactory(factory)`.
+4. Deploy `AppleAuditRegistry`.
+5. Set `VITE_LAUNCHPAD_FACTORY_ADDRESS` and `VITE_AUDIT_REGISTRY_ADDRESS`.
+6. User connects wallet and calls `createLaunch`.
+7. Factory deploys token and vault.
+8. Factory transfers all token supply into the vault.
+9. Token ownership goes to the project creator.
+10. Vault ownership belongs to the project creator during the launch window.
+11. If whitelist mode is enabled, the project creator sets whitelist allowances before mint starts.
+12. Buyers mint from the vault during the 24-hour window.
+13. Each BNB mint automatically adds a matching Pancake V2 liquidity position and keeps LP in the vault.
+14. If sold out, the vault locks LP in the black hole, enables trading, and sends token/vault ownership to the black-hole address.
+15. If not sold out after 24 hours, buyers can approve the vault and call `claimRefund()`.
 
 The current UI only offers BNB and USDT for mint payments. USD1 was removed from the selectable payment-token list. Contracts still support any valid ERC20 payment token if called directly.
 
 ## BNB Chain Deployment
 
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
-- Factory: `0x949623FD22EA82Ef0B3FdA71F93fb72C3652d4b3`.
+- Factory: `0x4d966290C9482322a3829919bFCefb5103408542`.
+- Token Deployer: `0xea073eA6a5BaC1142c7AB8155CcC6E696947d69F`.
+- Vault Deployer: `0x0D4194926945d73928eed2F3DcbeF3A324102F85`.
+- Pancake V2 Router: `0x10ED43C718714eb63d5aA57B78B54704E256024E`.
 - Audit Registry: `0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084`.
-- Factory deployment transaction: `0x47e9946f5cde90ee40b4bcbec8608babd4caaea3c6f0e54e00ec10df06a985f7`.
+- Factory deployment transaction: `0x1d6f4dba602c0e332b637d43e1c26fa9a3011726330d7e4fce5a414282e5f874`.
 - Audit Registry deployment transaction: `0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a`.
 - Fee recipient: configured by environment variable during deployment.
 - Creation fee: `0.005 BNB`.
-- Factory source is verified on BscScan: `https://bscscan.com/address/0x949623FD22EA82Ef0B3FdA71F93fb72C3652d4b3#code`.
+- Factory source is verified on BscScan: `https://bscscan.com/address/0x4d966290C9482322a3829919bFCefb5103408542#code`.
+- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0xea073eA6a5BaC1142c7AB8155CcC6E696947d69F#code`.
+- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0x0D4194926945d73928eed2F3DcbeF3A324102F85#code`.
 - Audit Registry source is verified on BscScan: `https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code`.
 
 ## Test Coverage
@@ -197,9 +212,9 @@ Current tests cover:
 - Public and whitelist mint quotas are tracked separately.
 - Only the creator-owned vault can update whitelist allowance.
 - Creator/template indexes and paged project reads are populated.
-- Launch mint payments are escrowed until sold out.
-- Sold-out launches automatically enable trading and pay the receiver.
-- Unsold launches allow buyers to refund after 24 hours by returning minted tokens.
+- BNB mints automatically add Pancake V2 liquidity per mint and hold LP in the vault.
+- Sold-out launches automatically lock LP, mark the pair, and enable trading.
+- Unsold launches allow buyers to refund after 24 hours by returning minted tokens and removing their LP share.
 - Regular token transfers are locked before sellout and unlocked automatically after sellout.
 - Sell tax routes LP to the black hole, burns the burn split, and routes marketing/dividend splits correctly.
 - Auditor registry covers application, owner approval, approved-auditor-only review submission, review updates, and project review reads.

@@ -197,6 +197,7 @@ async function findVanitySalt(body) {
   const tokenFactory = new ContractFactory(tokenArtifact.abi, tokenArtifact.bytecode);
   const rewardToken = params.rewardToken === ZeroAddress ? process.env.DEFAULT_REWARD_TOKEN ?? "0x55d398326f99059fF775485246999027B3197955" : params.rewardToken;
   const platformFeeReceiver = getAddress(await factory.feeRecipient());
+  const tokenDeployer = getAddress(await factory.tokenDeployer());
   const deployTx = await tokenFactory.getDeployTransaction(
     {
       name: params.name,
@@ -229,7 +230,7 @@ async function findVanitySalt(body) {
       ["address", "bytes32", "string", "string", "uint256"],
       [creator, salt, params.name, params.symbol, chainId],
     );
-    const tokenAddress = getCreate2Address(factoryAddress, tokenSalt, initCodeHash);
+    const tokenAddress = getCreate2Address(tokenDeployer, tokenSalt, initCodeHash);
     if (tokenAddress.toLowerCase().endsWith(suffix)) {
       return {
         ok: true,

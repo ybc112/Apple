@@ -92,7 +92,7 @@ contract AppleToken is ERC20, Ownable {
         address initialHolder
     )
         ERC20(launchConfig.name, launchConfig.symbol)
-        Ownable(msg.sender)
+        Ownable(initialHolder)
     {
         if (
             launchConfig.receiver == address(0) || launchConfig.platformFeeReceiver == address(0)
@@ -101,7 +101,7 @@ contract AppleToken is ERC20, Ownable {
             revert ZeroAddress();
         }
 
-        factory = msg.sender;
+        factory = initialHolder;
         projectUri = launchConfig.projectUri;
         templateId = launchConfig.templateId;
         receiver = launchConfig.receiver;
@@ -112,7 +112,6 @@ contract AppleToken is ERC20, Ownable {
         rewardThreshold = launchConfig.rewardThreshold;
 
         _setTaxes(taxConfig);
-        isTaxExempt[msg.sender] = true;
         isTaxExempt[initialHolder] = true;
         isTaxExempt[launchConfig.receiver] = true;
         isTaxExempt[LP_BLACK_HOLE] = true;
@@ -133,7 +132,7 @@ contract AppleToken is ERC20, Ownable {
         emit LaunchVaultSet(vault);
     }
 
-    function finalizeLaunch() external {
+    function finalizeLaunch(address pair) external {
         if (msg.sender != launchVault) {
             revert NotLaunchVault();
         }
@@ -141,6 +140,10 @@ contract AppleToken is ERC20, Ownable {
             return;
         }
 
+        if (pair != address(0)) {
+            automatedMarketMakerPairs[pair] = true;
+            emit AutomatedMarketMakerPairUpdated(pair, true);
+        }
         tradingEnabled = true;
         emit TradingEnabled();
         _transferOwnership(LP_BLACK_HOLE);

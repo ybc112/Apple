@@ -70,6 +70,7 @@ const mintVaultAbi = [
 
 const mintVaultWriteAbi = [
   'function setWhitelistAllowance(address account,uint256 allowance)',
+  'function setWhitelistAllowances(address[] accounts,uint256[] allowances)',
   'function claimRefund()',
   'function mint(uint256 quantity) payable',
 ] as const
@@ -80,6 +81,11 @@ const tokenWriteAbi = [
 
 export type LaunchTransactionResult = {
   hash: string
+}
+
+export type WhitelistAllowanceEntry = {
+  account: string
+  allowance: string
 }
 
 type FactoryLaunchParams = {
@@ -139,6 +145,8 @@ const messages = {
     receiver: '接收钱包',
     invalidWhitelistAccount: '请填写有效的白名单钱包。',
     invalidWhitelistAllowance: '白名单额度必须是大于 0 的整数。',
+    emptyWhitelistBatch: '请至少粘贴一个白名单钱包地址。',
+    tooManyWhitelistAccounts: '单次最多提交 200 个白名单地址。',
     invalidVault: 'Vault 地址无效。',
     invalidRefundAmount: '退款代币数量无效。',
     invalidMintQuantity: 'Mint 数量必须是大于 0 的整数。',
@@ -166,6 +174,8 @@ const messages = {
     receiver: 'Receiver wallet',
     invalidWhitelistAccount: 'Please enter a valid whitelist wallet.',
     invalidWhitelistAllowance: 'Whitelist allowance must be an integer greater than 0.',
+    emptyWhitelistBatch: 'Paste at least one whitelist wallet address.',
+    tooManyWhitelistAccounts: 'Submit no more than 200 whitelist addresses at once.',
     invalidVault: 'Vault address is invalid.',
     invalidRefundAmount: 'Refund token amount is invalid.',
     invalidMintQuantity: 'Mint quantity must be an integer greater than 0.',
@@ -277,6 +287,64 @@ export async function setProjectWhitelistAllowance(
 
   const iface = new Interface(mintVaultWriteAbi)
   const data = iface.encodeFunctionData('setWhitelistAllowance', [account, BigInt(allowance)])
+  const hash = (await provider.request({
+    method: 'eth_sendTransaction',
+    params: [
+      {
+        from,
+        to: vaultAddress,
+        data,
+      },
+    ],
+  })) as string
+
+  return { hash }
+}
+
+export async function setProjectWhitelistAllowances(
+  provider: EthereumProvider,
+  vaultAddress: string,
+  entries: WhitelistAllowanceEntry[],
+  locale: LaunchpadLocale = 'zh',
+): Promise<LaunchTransactionResult> {
+  const text = messages[locale]
+
+  if (!isAddress(vaultAddress)) {
+    throw new Error(text.invalidAddress('Vault'))
+  }
+  if (entries.length <= 0) {
+    throw new Error(text.emptyWhitelistBatch)
+  }
+  if (entries.length > 200) {
+    throw new Error(text.tooManyWhitelistAccounts)
+  }
+
+  const accounts = entries.map((entry) => {
+    if (!isAddress(entry.account)) {
+      throw new Error(text.invalidWhitelistAccount)
+    }
+    return entry.account
+  })
+  const allowances = entries.map((entry) => {
+    if (!/^\d+$/.test(entry.allowance.trim()) || BigInt(entry.allowance.trim()) <= 0n) {
+      throw new Error(text.invalidWhitelistAllowance)
+    }
+    return BigInt(entry.allowance.trim())
+  })
+
+  const chainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
+  if (Number.parseInt(chainId, 16) !== launchpadConfig.chainId) {
+    throw new Error(text.wrongNetwork)
+  }
+
+  const walletAccounts = (await provider.request({ method: 'eth_accounts' })) as string[]
+  const from = walletAccounts[0]
+  if (!from || !isAddress(from)) {
+    throw new Error(text.connectWallet)
+  }
+
+  const iface = new Interface(mintVaultWriteAbi)
+  const data = iface.encodeFunctionData('setWhitelistAllowances', [accounts, allowances])
   const hash = (await provider.request({
     method: 'eth_sendTransaction',
     params: [

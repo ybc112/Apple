@@ -33,6 +33,7 @@ const project = await factory.getProject(tokenAddress);
 if (String(project.token).toLowerCase() !== tokenAddress.toLowerCase()) {
   throw new Error(`Token ${tokenAddress} is not indexed in Factory ${factoryAddress}.`);
 }
+const liquidityRouter = await factory.liquidityRouter();
 
 const token = new Contract(tokenAddress, tokenAbi, provider);
 const [name, symbol] = await Promise.all([token.name(), token.symbol()]);
@@ -61,6 +62,7 @@ const tokenConstructorArgs = [
 ];
 const vaultConstructorArgs = [
   tokenAddress,
+  liquidityRouter,
   project.paymentToken,
   project.creator,
   project.receiver,

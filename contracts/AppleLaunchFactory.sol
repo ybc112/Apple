@@ -6,6 +6,35 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
 import { AppleToken } from "./AppleToken.sol";
 import { AppleMintVault } from "./AppleMintVault.sol";
 
+interface IAppleTokenDeployer {
+    function deploy(
+        AppleToken.LaunchConfig calldata launchConfig,
+        AppleToken.TaxConfig calldata taxConfig,
+        address initialHolder,
+        bytes32 salt
+    )
+        external
+        returns (address token);
+}
+
+interface IAppleMintVaultDeployer {
+    function deploy(
+        address token,
+        address liquidityRouter,
+        address paymentToken,
+        address owner,
+        address receiver,
+        uint256 totalSupply,
+        uint256 totalMints,
+        uint256 mintPrice,
+        uint256 whitelistMintLimit,
+        bool whitelistEnabled,
+        bytes32 salt
+    )
+        external
+        returns (address vault);
+}
+
 contract AppleLaunchFactory is Ownable, ReentrancyGuard {
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint16 public constant MAX_TAX_BPS = 2_500;
@@ -13,6 +42,9 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
 
     uint256 public creationFee;
     address public feeRecipient;
+    address public liquidityRouter;
+    address public tokenDeployer;
+    address public vaultDeployer;
     address[] public allTokens;
 
     struct LaunchParams {
@@ -94,12 +126,26 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         address vault
     );
 
-    constructor(address feeRecipient_, uint256 creationFee_) Ownable(msg.sender) {
-        if (feeRecipient_ == address(0)) {
+    constructor(
+        address feeRecipient_,
+        uint256 creationFee_,
+        address liquidityRouter_,
+        address tokenDeployer_,
+        address vaultDeployer_
+    )
+        Ownable(msg.sender)
+    {
+        if (
+            feeRecipient_ == address(0) || liquidityRouter_ == address(0)
+                || tokenDeployer_ == address(0) || vaultDeployer_ == address(0)
+        ) {
             revert ZeroAddress();
         }
 
         feeRecipient = feeRecipient_;
+        liquidityRouter = liquidityRouter_;
+        tokenDeployer = tokenDeployer_;
+        vaultDeployer = vaultDeployer_;
         creationFee = creationFee_;
     }
 
@@ -119,7 +165,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             ? DEFAULT_REWARD_TOKEN
             : params.rewardToken;
 
-        AppleToken launchToken = new AppleToken{ salt: tokenSalt }(
+        AppleToken launchToken = AppleToken(IAppleTokenDeployer(tokenDeployer).deploy(
             AppleToken.LaunchConfig({
                 name: params.name,
                 symbol: params.symbol,
@@ -140,13 +186,13 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
                 dividendFeeBps: params.dividendFeeBps,
                 burnFeeBps: params.burnFeeBps
             }),
-            address(this)
-        );
+            address(this),
+            tokenSalt
+        ));
 
-        AppleMintVault mintVault = new AppleMintVault{
-            salt: keccak256(abi.encodePacked(tokenSalt, "VAULT"))
-        }(
+        AppleMintVault mintVault = AppleMintVault(payable(IAppleMintVaultDeployer(vaultDeployer).deploy(
             address(launchToken),
+            liquidityRouter,
             params.paymentToken,
             msg.sender,
             params.receiver,
@@ -154,8 +200,9 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             params.mintCount,
             params.mintPrice,
             params.whitelistMintCount,
-            params.whitelistEnabled
-        );
+            params.whitelistEnabled,
+            keccak256(abi.encodePacked(tokenSalt, "VAULT"))
+        )));
 
         token = address(launchToken);
         vault = address(mintVault);
