@@ -7,6 +7,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 contract AppleToken is ERC20, Ownable {
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint16 public constant MAX_TAX_BPS = 2_500;
+    uint16 public constant PLATFORM_TAX_SHARE_BPS = 1_000;
     address public constant LP_BLACK_HOLE = 0x000000000000000000000000000000000000dEaD;
 
     string public projectUri;
@@ -14,6 +15,7 @@ contract AppleToken is ERC20, Ownable {
     address public factory;
     address public launchVault;
     address public receiver;
+    address public platformFeeReceiver;
     address public dividendReceiver;
     address public paymentToken;
     address public rewardToken;
@@ -51,6 +53,7 @@ contract AppleToken is ERC20, Ownable {
         string projectUri;
         bytes32 templateId;
         address receiver;
+        address platformFeeReceiver;
         address paymentToken;
         address rewardToken;
         uint256 rewardThreshold;
@@ -75,6 +78,7 @@ contract AppleToken is ERC20, Ownable {
     event TaxRouted(
         address indexed from,
         address indexed to,
+        uint256 platformAmount,
         uint256 marketingAmount,
         uint256 lpBlackHoleAmount,
         uint256 dividendAmount,
@@ -90,7 +94,10 @@ contract AppleToken is ERC20, Ownable {
         ERC20(launchConfig.name, launchConfig.symbol)
         Ownable(msg.sender)
     {
-        if (launchConfig.receiver == address(0) || initialHolder == address(0)) {
+        if (
+            launchConfig.receiver == address(0) || launchConfig.platformFeeReceiver == address(0)
+                || initialHolder == address(0)
+        ) {
             revert ZeroAddress();
         }
 
@@ -98,6 +105,7 @@ contract AppleToken is ERC20, Ownable {
         projectUri = launchConfig.projectUri;
         templateId = launchConfig.templateId;
         receiver = launchConfig.receiver;
+        platformFeeReceiver = launchConfig.platformFeeReceiver;
         dividendReceiver = launchConfig.receiver;
         paymentToken = launchConfig.paymentToken;
         rewardToken = launchConfig.rewardToken;
@@ -239,13 +247,18 @@ contract AppleToken is ERC20, Ownable {
             return;
         }
 
-        uint256 marketingAmount = (fee * fundFeeBps) / BPS_DENOMINATOR;
-        uint256 lpBlackHoleAmount = (fee * lpFeeBps) / BPS_DENOMINATOR;
-        uint256 dividendAmount = (fee * dividendFeeBps) / BPS_DENOMINATOR;
-        uint256 burnAmount = (fee * burnFeeBps) / BPS_DENOMINATOR;
+        uint256 platformAmount = (fee * PLATFORM_TAX_SHARE_BPS) / BPS_DENOMINATOR;
+        uint256 projectFee = fee - platformAmount;
+        uint256 marketingAmount = (projectFee * fundFeeBps) / BPS_DENOMINATOR;
+        uint256 lpBlackHoleAmount = (projectFee * lpFeeBps) / BPS_DENOMINATOR;
+        uint256 dividendAmount = (projectFee * dividendFeeBps) / BPS_DENOMINATOR;
+        uint256 burnAmount = (projectFee * burnFeeBps) / BPS_DENOMINATOR;
         uint256 routedAmount = marketingAmount + lpBlackHoleAmount + dividendAmount + burnAmount;
-        marketingAmount += fee - routedAmount;
+        marketingAmount += projectFee - routedAmount;
 
+        if (platformAmount > 0) {
+            super._update(from, platformFeeReceiver, platformAmount);
+        }
         if (marketingAmount > 0) {
             super._update(from, receiver, marketingAmount);
         }
@@ -264,6 +277,7 @@ contract AppleToken is ERC20, Ownable {
         emit TaxRouted(
             from,
             to,
+            platformAmount,
             marketingAmount,
             lpBlackHoleAmount,
             dividendAmount,

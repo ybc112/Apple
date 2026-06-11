@@ -43,6 +43,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         address vault;
         address paymentToken;
         address receiver;
+        address platformFeeReceiver;
         bytes32 templateId;
         uint256 totalSupply;
         uint256 mintCount;
@@ -125,6 +126,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
                 projectUri: params.metadataUri,
                 templateId: params.templateId,
                 receiver: params.receiver,
+                platformFeeReceiver: feeRecipient,
                 paymentToken: params.paymentToken,
                 rewardToken: rewardToken,
                 rewardThreshold: params.rewardThreshold,
@@ -168,6 +170,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             vault: vault,
             paymentToken: params.paymentToken,
             receiver: params.receiver,
+            platformFeeReceiver: feeRecipient,
             templateId: params.templateId,
             totalSupply: params.totalSupply,
             mintCount: params.mintCount,

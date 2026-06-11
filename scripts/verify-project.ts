@@ -43,6 +43,7 @@ const tokenConstructorArgs = [
     project.metadataUri,
     project.templateId,
     project.receiver,
+    project.platformFeeReceiver,
     project.paymentToken,
     project.rewardToken,
     project.rewardThreshold,

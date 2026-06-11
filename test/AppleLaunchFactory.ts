@@ -46,7 +46,7 @@ describe("AppleLaunchFactory", function () {
   }
 
   it("creates an independent token and mint vault after paying the launch fee", async function () {
-    const { creator, creationFee, factory } = await deployFactory();
+    const { owner, creator, creationFee, factory } = await deployFactory();
     const params = launchParams(creator.address);
 
     await factory
@@ -61,6 +61,7 @@ describe("AppleLaunchFactory", function () {
 
     expect(project.creator).to.equal(creator.address);
     expect(project.receiver).to.equal(creator.address);
+    expect(project.platformFeeReceiver).to.equal(owner.address);
     expect(project.templateId).to.equal(params.templateId);
     expect(project.rewardToken).to.equal(await factory.DEFAULT_REWARD_TOKEN());
     expect(project.buyTaxBps).to.equal(BigInt(params.buyTaxBps));
@@ -422,8 +423,8 @@ describe("AppleLaunchFactory", function () {
     expect(await vault.mintedCount()).to.equal(5n);
   });
 
-  it("routes sell tax to marketing, dividend, LP black hole, and burn", async function () {
-    const { creator, buyer, pair, dividendReceiver, creationFee, factory } = await deployFactory();
+  it("routes sell tax to platform, marketing, dividend, LP black hole, and burn", async function () {
+    const { owner, creator, buyer, pair, dividendReceiver, creationFee, factory } = await deployFactory();
     const params = {
       ...launchParams(creator.address),
       mintCount: 2n,
@@ -444,16 +445,19 @@ describe("AppleLaunchFactory", function () {
 
     const transferAmount = ethers.parseUnits("1000", 18);
     const fee = (transferAmount * BigInt(params.sellTaxBps)) / 10000n;
-    const lpAmount = (fee * BigInt(params.lpFeeBps)) / 10000n;
-    const dividendAmount = (fee * BigInt(params.dividendFeeBps)) / 10000n;
-    const burnAmount = (fee * BigInt(params.burnFeeBps)) / 10000n;
-    const marketingAmount = fee - lpAmount - dividendAmount - burnAmount;
+    const platformAmount = (fee * BigInt(await token.PLATFORM_TAX_SHARE_BPS())) / 10000n;
+    const projectFee = fee - platformAmount;
+    const lpAmount = (projectFee * BigInt(params.lpFeeBps)) / 10000n;
+    const dividendAmount = (projectFee * BigInt(params.dividendFeeBps)) / 10000n;
+    const burnAmount = (projectFee * BigInt(params.burnFeeBps)) / 10000n;
+    const marketingAmount = projectFee - lpAmount - dividendAmount - burnAmount;
     const supplyBefore = await token.totalSupply();
     const blackHole = await token.LP_BLACK_HOLE();
 
     await token.connect(buyer).transfer(pair.address, transferAmount);
 
     expect(await token.balanceOf(pair.address)).to.equal(transferAmount - fee);
+    expect(await token.balanceOf(owner.address)).to.equal(platformAmount);
     expect(await token.balanceOf(blackHole)).to.equal(lpAmount);
     expect(await token.balanceOf(dividendReceiver.address)).to.equal(dividendAmount);
     expect(await token.balanceOf(creator.address)).to.equal(marketingAmount);

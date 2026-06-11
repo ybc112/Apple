@@ -9,17 +9,18 @@
   - Indexes projects by creator and template id for deployment history and template-based lists.
   - Exposes paged project reads through `getProjects(offset, limit)`.
   - Defaults an empty reward token to BSC USDT: `0x55d398326f99059fF775485246999027B3197955`.
-  - Fee recipient defaults to `0x0D70FABE5B212f5BE5EFa503a2Dcc4D5C54B6347` in the deploy script.
+  - Fee recipient is supplied from deployment environment variables and is not displayed in the app UI.
 
 - `AppleToken`
   - ERC20 token with fixed total supply.
-  - Stores project URI, template id, receiver, payment token, reward token, reward threshold, and tax configuration.
+  - Stores project URI, template id, receiver, platform fee receiver, payment token, reward token, reward threshold, and tax configuration.
   - Keeps normal user transfers locked until the mint vault finalizes the launch.
   - Trading is enabled only by the project's `AppleMintVault` when the launch sells out.
   - When trading opens, token ownership is automatically transferred to `0x000000000000000000000000000000000000dEaD`.
   - After trading opens, the creator can no longer change taxes, receivers, reward config, tax exemptions, or AMM pair flags.
   - Supports buy/sell tax against configured AMM pairs.
   - Routes tax by split:
+    - 10% of the collected tax amount goes to the platform service fee receiver.
     - Marketing goes to the project receiver.
     - LP / buyback goes to `0x000000000000000000000000000000000000dEaD`.
     - Holder reward goes to the dividend receiver, which defaults to the project receiver and can be changed by the token owner.
@@ -82,9 +83,10 @@ Only the vault owner can update whitelist allowances. The factory sets the vault
 ## Fee Policy
 
 - Factory creation fee: `0.005 BNB`.
-- Default fee recipient: `0x0D70FABE5B212f5BE5EFa503a2Dcc4D5C54B6347`.
+- Fee recipient is configured through `FEE_RECIPIENT` during deployment.
 - The factory owner can update `creationFee` and `feeRecipient`.
 - Mint payments are separate from the factory fee.
+- For buy/sell tax, the platform receives 10% of the collected tax amount. For example, a 10% sell tax routes 1% of the trade amount to the platform and distributes the remaining 9% by the project tax split.
 - Mint payments stay in the project's vault until the launch sells out.
 - If the launch sells out, the vault enables token trading and transfers escrowed mint payments to the project receiver.
 - If the launch is not sold out after 24 hours, buyers can call `claimRefund()` after approving the vault to take back their minted launch tokens.
@@ -174,13 +176,13 @@ The current UI only offers BNB and USDT for mint payments. USD1 was removed from
 ## BNB Chain Deployment
 
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
-- Factory: `0x2a675D757a13bbA48A088dA5af72E8c53F445Ea1`.
+- Factory: `0x949623FD22EA82Ef0B3FdA71F93fb72C3652d4b3`.
 - Audit Registry: `0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084`.
-- Factory deployment transaction: `0x6efc9277b24e833b8ad67350b23899ecf4ba7c5d24ca94ada7f213e59373efc8`.
+- Factory deployment transaction: `0x47e9946f5cde90ee40b4bcbec8608babd4caaea3c6f0e54e00ec10df06a985f7`.
 - Audit Registry deployment transaction: `0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a`.
-- Fee recipient: `0x0D70FABE5B212f5BE5EFa503a2Dcc4D5C54B6347`.
+- Fee recipient: configured by environment variable during deployment.
 - Creation fee: `0.005 BNB`.
-- Factory source is verified on BscScan: `https://bscscan.com/address/0x2a675D757a13bbA48A088dA5af72E8c53F445Ea1#code`.
+- Factory source is verified on BscScan: `https://bscscan.com/address/0x949623FD22EA82Ef0B3FdA71F93fb72C3652d4b3#code`.
 - Audit Registry source is verified on BscScan: `https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code`.
 
 ## Test Coverage

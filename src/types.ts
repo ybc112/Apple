@@ -62,6 +62,8 @@ export type LaunchProject = {
   vault: string
   paymentToken: string
   receiver: string
+  platformFeeReceiver: string
+  platformFeeBps: number
   name: string
   symbol: string
   description: string

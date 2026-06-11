@@ -15,14 +15,13 @@ const artifact = JSON.parse(
   fs.readFileSync("artifacts/contracts/AppleLaunchFactory.sol/AppleLaunchFactory.json", "utf8"),
 );
 
-const defaultFeeRecipient = "0x0D70FABE5B212f5BE5EFa503a2Dcc4D5C54B6347";
-const feeRecipient = process.env.FEE_RECIPIENT ?? defaultFeeRecipient;
+const feeRecipient = process.env.FEE_RECIPIENT ?? deployer.address;
 const creationFee = parseEther(process.env.CREATION_FEE_BNB ?? "0.005");
 const factory = new ContractFactory(artifact.abi, artifact.bytecode, deployer);
 
 console.log("Deploying AppleLaunchFactory");
 console.log("Deployer:", deployer.address);
-console.log("Fee recipient:", feeRecipient);
+console.log("Fee recipient: configured");
 console.log("Creation fee:", formatEther(creationFee), "BNB");
 
 const contract = await factory.deploy(feeRecipient, creationFee);

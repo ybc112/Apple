@@ -244,6 +244,7 @@ const copy = {
       liquidity: '回流分配',
       rewards: '持币分红',
       burn: '销毁分配',
+      platformFee: '平台服务费',
       rewardThreshold: '分红门槛',
       receiver: '接收钱包',
       vault: 'Vault 地址',
@@ -258,6 +259,7 @@ const copy = {
       disabled: '关闭',
       unallocated: '未分配',
       toReceiver: (address: string) => `进入 ${shortAddress(address)}`,
+      toPlatform: () => '进入平台服务费',
       toBlackHole: '进入黑洞',
       toRewardToken: (address: string) => `指定代币 ${shortAddress(address)}`,
       toBurn: '直接销毁',
@@ -530,6 +532,7 @@ const copy = {
       liquidity: 'Buyback allocation',
       rewards: 'Holder rewards',
       burn: 'Burn allocation',
+      platformFee: 'Platform service fee',
       rewardThreshold: 'Reward threshold',
       receiver: 'Receiver wallet',
       vault: 'Vault address',
@@ -544,6 +547,7 @@ const copy = {
       disabled: 'Off',
       unallocated: 'Unallocated',
       toReceiver: (address: string) => `Sent to ${shortAddress(address)}`,
+      toPlatform: () => 'Sent to platform service fee',
       toBlackHole: 'Sent to black hole',
       toRewardToken: (address: string) => `Reward token ${shortAddress(address)}`,
       toBurn: 'Burned directly',
@@ -2148,11 +2152,22 @@ function ProjectDetailPage({
   const splitTotal = project.fundFeeBps + project.lpFeeBps + project.dividendFeeBps + project.burnFeeBps
   const unallocatedBps = Math.max(0, 10_000 - splitTotal)
   const marketingSplitBps = project.fundFeeBps + unallocatedBps
-  const taxPortion = (taxBps: number, splitBps: number) => (taxBps * splitBps) / 10_000
+  const platformShareBps = Math.min(10_000, Math.max(0, project.platformFeeBps))
+  const taxShare = (taxBps: number, shareBps: number) => (taxBps * shareBps) / 10_000
+  const platformTaxPortion = (taxBps: number) => taxShare(taxBps, platformShareBps)
+  const projectTaxPortion = (taxBps: number, splitBps: number) => {
+    const projectTaxBps = taxBps - platformTaxPortion(taxBps)
+    return taxShare(projectTaxBps, splitBps)
+  }
   const portionPair = (splitBps: number) =>
     text.detail.taxPortionPair(
-      formatTaxPortionBps(taxPortion(project.buyTaxBps, splitBps)),
-      formatTaxPortionBps(taxPortion(project.sellTaxBps, splitBps)),
+      formatTaxPortionBps(projectTaxPortion(project.buyTaxBps, splitBps)),
+      formatTaxPortionBps(projectTaxPortion(project.sellTaxBps, splitBps)),
+    )
+  const platformPortionPair = () =>
+    text.detail.taxPortionPair(
+      formatTaxPortionBps(platformTaxPortion(project.buyTaxBps)),
+      formatTaxPortionBps(platformTaxPortion(project.sellTaxBps)),
     )
   const taxSummary = (taxBps: number) => {
     if (taxBps <= 0) {
@@ -2160,10 +2175,13 @@ function ProjectDetailPage({
     }
 
     const splitSummary = [
-      `${allocation.marketing.label} ${formatTaxPortionBps(taxPortion(taxBps, marketingSplitBps))}`,
-      `${allocation.liquidity.label} ${formatTaxPortionBps(taxPortion(taxBps, project.lpFeeBps))}`,
-      `${allocation.rewards.label} ${formatTaxPortionBps(taxPortion(taxBps, project.dividendFeeBps))}`,
-      `${allocation.burn.label} ${formatTaxPortionBps(taxPortion(taxBps, project.burnFeeBps))}`,
+      ...(platformShareBps > 0
+        ? [`${text.detail.platformFee} ${formatTaxPortionBps(platformTaxPortion(taxBps))}`]
+        : []),
+      `${allocation.marketing.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, marketingSplitBps))}`,
+      `${allocation.liquidity.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, project.lpFeeBps))}`,
+      `${allocation.rewards.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, project.dividendFeeBps))}`,
+      `${allocation.burn.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, project.burnFeeBps))}`,
     ]
 
     return `${formatBps(taxBps)} (${splitSummary.join(' / ')})`
@@ -2222,6 +2240,12 @@ function ProjectDetailPage({
           />
           <DetailRow label={text.detail.buyTax} value={taxSummary(project.buyTaxBps)} />
           <DetailRow label={text.detail.sellTax} value={taxSummary(project.sellTaxBps)} />
+          {platformShareBps > 0 && (
+            <DetailRow
+              label={text.detail.platformFee}
+              value={`${platformPortionPair()} -> ${text.detail.toPlatform()}`}
+            />
+          )}
           <DetailRow
             label={text.detail.marketing}
             value={`${portionPair(marketingSplitBps)} -> ${text.detail.toReceiver(project.receiver)}`}

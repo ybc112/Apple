@@ -35,8 +35,8 @@ export const launchFactoryAbi = [
   'function createLaunch((string name,string symbol,string metadataUri,uint256 totalSupply,uint256 mintCount,uint256 mintPrice,address paymentToken,address rewardToken,uint256 rewardThreshold,address receiver,bytes32 templateId,uint16 buyTaxBps,uint16 sellTaxBps,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps,uint256 whitelistMintCount,bool whitelistEnabled) params, bytes32 salt) payable returns (address token, address vault)',
   'function allTokensLength() view returns (uint256)',
   'function allTokens(uint256) view returns (address)',
-  'function getProject(address token) view returns ((address creator,address token,address vault,address paymentToken,address receiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps))',
-  'function projects(address) view returns (address creator,address token,address vault,address paymentToken,address receiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps)',
+  'function getProject(address token) view returns ((address creator,address token,address vault,address paymentToken,address receiver,address platformFeeReceiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps))',
+  'function projects(address) view returns (address creator,address token,address vault,address paymentToken,address receiver,address platformFeeReceiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps)',
   'event LaunchCreated(address indexed creator,address indexed token,address indexed vault,bytes32 templateId,string name,string symbol,uint256 totalSupply,uint256 mintCount,uint256 mintPrice,address paymentToken,bool whitelistEnabled,string metadataUri)',
 ] as const
 
@@ -489,23 +489,27 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
     const vaultAddress = String(project.vault ?? project[2])
     const paymentToken = String(project.paymentToken ?? project[3])
     const receiver = String(project.receiver ?? project[4])
-    const totalSupply = BigInt(project.totalSupply ?? project[6] ?? 0)
-    const mintCount = BigInt(project.mintCount ?? project[7] ?? 0)
+    const hasPlatformFeeShape = project.platformFeeReceiver !== undefined
+    const fieldOffset = hasPlatformFeeShape ? 1 : 0
+    const platformFeeReceiver = hasPlatformFeeShape ? String(project.platformFeeReceiver ?? project[5] ?? ZeroAddress) : ZeroAddress
+    const platformFeeBps = hasPlatformFeeShape ? 1000 : 0
+    const totalSupply = BigInt(project.totalSupply ?? project[6 + fieldOffset] ?? 0)
+    const mintCount = BigInt(project.mintCount ?? project[7 + fieldOffset] ?? 0)
     const hasNewProjectShape = project.whitelistMintCount !== undefined
-    const whitelistMintCount = hasNewProjectShape ? BigInt(project.whitelistMintCount ?? project[8] ?? 0) : 0n
-    const publicMintCount = hasNewProjectShape ? BigInt(project.publicMintCount ?? project[9] ?? 0) : mintCount
-    const mintPrice = BigInt(hasNewProjectShape ? project.mintPrice ?? project[10] ?? 0 : project.mintPrice ?? project[8] ?? 0)
-    const whitelistEnabled = Boolean(hasNewProjectShape ? project.whitelistEnabled ?? project[11] : project.whitelistEnabled ?? project[9])
-    const metadataUri = String(hasNewProjectShape ? project.metadataUri ?? project[12] ?? '' : project.metadataUri ?? project[10] ?? '')
-    const createdAt = Number(hasNewProjectShape ? project.createdAt ?? project[13] ?? 0 : project.createdAt ?? project[11] ?? 0)
-    const rewardToken = hasNewProjectShape ? String(project.rewardToken ?? project[14] ?? ZeroAddress) : ZeroAddress
-    const rewardThreshold = hasNewProjectShape ? BigInt(project.rewardThreshold ?? project[15] ?? 0) : 0n
-    const buyTaxBps = hasNewProjectShape ? Number(project.buyTaxBps ?? project[16] ?? 0) : 0
-    const sellTaxBps = hasNewProjectShape ? Number(project.sellTaxBps ?? project[17] ?? 0) : 0
-    const fundFeeBps = hasNewProjectShape ? Number(project.fundFeeBps ?? project[18] ?? 0) : 0
-    const lpFeeBps = hasNewProjectShape ? Number(project.lpFeeBps ?? project[19] ?? 0) : 0
-    const dividendFeeBps = hasNewProjectShape ? Number(project.dividendFeeBps ?? project[20] ?? 0) : 0
-    const burnFeeBps = hasNewProjectShape ? Number(project.burnFeeBps ?? project[21] ?? 0) : 0
+    const whitelistMintCount = hasNewProjectShape ? BigInt(project.whitelistMintCount ?? project[8 + fieldOffset] ?? 0) : 0n
+    const publicMintCount = hasNewProjectShape ? BigInt(project.publicMintCount ?? project[9 + fieldOffset] ?? 0) : mintCount
+    const mintPrice = BigInt(hasNewProjectShape ? project.mintPrice ?? project[10 + fieldOffset] ?? 0 : project.mintPrice ?? project[8] ?? 0)
+    const whitelistEnabled = Boolean(hasNewProjectShape ? project.whitelistEnabled ?? project[11 + fieldOffset] : project.whitelistEnabled ?? project[9])
+    const metadataUri = String(hasNewProjectShape ? project.metadataUri ?? project[12 + fieldOffset] ?? '' : project.metadataUri ?? project[10] ?? '')
+    const createdAt = Number(hasNewProjectShape ? project.createdAt ?? project[13 + fieldOffset] ?? 0 : project.createdAt ?? project[11] ?? 0)
+    const rewardToken = hasNewProjectShape ? String(project.rewardToken ?? project[14 + fieldOffset] ?? ZeroAddress) : ZeroAddress
+    const rewardThreshold = hasNewProjectShape ? BigInt(project.rewardThreshold ?? project[15 + fieldOffset] ?? 0) : 0n
+    const buyTaxBps = hasNewProjectShape ? Number(project.buyTaxBps ?? project[16 + fieldOffset] ?? 0) : 0
+    const sellTaxBps = hasNewProjectShape ? Number(project.sellTaxBps ?? project[17 + fieldOffset] ?? 0) : 0
+    const fundFeeBps = hasNewProjectShape ? Number(project.fundFeeBps ?? project[18 + fieldOffset] ?? 0) : 0
+    const lpFeeBps = hasNewProjectShape ? Number(project.lpFeeBps ?? project[19 + fieldOffset] ?? 0) : 0
+    const dividendFeeBps = hasNewProjectShape ? Number(project.dividendFeeBps ?? project[20 + fieldOffset] ?? 0) : 0
+    const burnFeeBps = hasNewProjectShape ? Number(project.burnFeeBps ?? project[21 + fieldOffset] ?? 0) : 0
 
     const token = new Contract(tokenAddress, tokenAbi, provider)
     const vault = new Contract(vaultAddress, mintVaultAbi, provider)
@@ -567,6 +571,8 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       vault: vaultAddress,
       paymentToken,
       receiver,
+      platformFeeReceiver,
+      platformFeeBps,
       name: String(name),
       symbol: String(symbol),
       description: metadata.description || '链上发射项目',
