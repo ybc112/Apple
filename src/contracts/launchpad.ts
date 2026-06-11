@@ -50,6 +50,7 @@ const tokenAbi = [
   'function name() view returns (string)',
   'function symbol() view returns (string)',
   'function allowance(address owner,address spender) view returns (uint256)',
+  'function balanceOf(address account) view returns (uint256)',
 ] as const
 
 const mintVaultAbi = [
@@ -398,6 +399,14 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
     const whitelistEnabled = Boolean(hasNewProjectShape ? project.whitelistEnabled ?? project[11] : project.whitelistEnabled ?? project[9])
     const metadataUri = String(hasNewProjectShape ? project.metadataUri ?? project[12] ?? '' : project.metadataUri ?? project[10] ?? '')
     const createdAt = Number(hasNewProjectShape ? project.createdAt ?? project[13] ?? 0 : project.createdAt ?? project[11] ?? 0)
+    const rewardToken = hasNewProjectShape ? String(project.rewardToken ?? project[14] ?? ZeroAddress) : ZeroAddress
+    const rewardThreshold = hasNewProjectShape ? BigInt(project.rewardThreshold ?? project[15] ?? 0) : 0n
+    const buyTaxBps = hasNewProjectShape ? Number(project.buyTaxBps ?? project[16] ?? 0) : 0
+    const sellTaxBps = hasNewProjectShape ? Number(project.sellTaxBps ?? project[17] ?? 0) : 0
+    const fundFeeBps = hasNewProjectShape ? Number(project.fundFeeBps ?? project[18] ?? 0) : 0
+    const lpFeeBps = hasNewProjectShape ? Number(project.lpFeeBps ?? project[19] ?? 0) : 0
+    const dividendFeeBps = hasNewProjectShape ? Number(project.dividendFeeBps ?? project[20] ?? 0) : 0
+    const burnFeeBps = hasNewProjectShape ? Number(project.burnFeeBps ?? project[21] ?? 0) : 0
 
     const token = new Contract(tokenAddress, tokenAbi, provider)
     const vault = new Contract(vaultAddress, mintVaultAbi, provider)
@@ -416,6 +425,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       userMintedCount,
       userPaid,
       refundAllowance,
+      vaultTokenBalance,
     ] = await Promise.all([
       token.name().catch(() => 'Unknown'),
       token.symbol().catch(() => 'TOKEN'),
@@ -430,6 +440,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       account && isAddress(account) ? vault.mintedByWallet(account).catch(() => 0n) : 0n,
       account && isAddress(account) ? vault.paidByWallet(account).catch(() => 0n) : 0n,
       account && isAddress(account) ? token.allowance(account, vaultAddress).catch(() => 0n) : 0n,
+      token.balanceOf(vaultAddress).catch(() => 0n),
     ])
 
     const mintedCountValue = BigInt(mintedCount)
@@ -472,6 +483,15 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       refundNeedsApproval: canRefund && BigInt(refundAllowance) < refundTokenAmount,
       userRefundAmount: formatRefundAmount(BigInt(userPaid), paymentToken),
       canRefund,
+      rewardToken,
+      rewardThreshold: formatUnits(rewardThreshold, 18),
+      buyTaxBps,
+      sellTaxBps,
+      fundFeeBps,
+      lpFeeBps,
+      dividendFeeBps,
+      burnFeeBps,
+      vaultTokenBalance: formatUnits(BigInt(vaultTokenBalance), 18),
       progress,
       whitelistEnabled,
       createdAt,

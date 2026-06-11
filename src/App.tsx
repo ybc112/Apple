@@ -82,7 +82,7 @@ import {
   targetChainId,
 } from './wallet'
 
-const pages: PageKey[] = ['home', 'launch', 'auditors', 'verify', 'swap']
+const pages: PageKey[] = ['home', 'launch', 'auditors', 'verify', 'swap', 'detail']
 const appName = String(import.meta.env.VITE_APP_NAME ?? 'Apple')
 const appSymbol = String(import.meta.env.VITE_APP_SYMBOL ?? 'APPLE')
 const factoryExplorerUrl = `${BNB_CHAIN.blockExplorerUrls[0]}/address/${launchpadConfig.factoryAddress}#code`
@@ -197,6 +197,7 @@ const copy = {
       viewBscScan: '在 BscScan 查看',
       copyAddress: '复制合约',
       copied: '已复制',
+      detail: '查看机制',
       trade: '去交易',
       website: '官网',
       fallbackDescription: `${appName} 链上发射项目`,
@@ -210,6 +211,49 @@ const copy = {
       refund: '申请退款',
       refundAvailable: (amount: string) => `可退款 ${amount}`,
       refundTip: '24 小时未打满后可退款',
+    },
+    detail: {
+      eyebrow: '项目详情',
+      title: (name: string) => `${name} 详情`,
+      loading: '正在读取链上项目详情',
+      missingTitle: '没有找到这个项目',
+      missingDesc: '项目可能还在确认中，或者当前 Factory 列表里暂时没有这个 Token。',
+      back: '返回项目列表',
+      mechanism: '代币机制',
+      taxMechanism: '税费机制',
+      rewardBadge: (address: string) => `分红 ${shortAddress(address)}`,
+      contractBalance: '合约余额',
+      vaultBalanceHint: 'Vault 未铸造余额',
+      buyTax: '买入税',
+      sellTax: '卖出税',
+      marketing: '营销分配',
+      liquidity: '回流分配',
+      rewards: '持币分红',
+      burn: '销毁分配',
+      rewardThreshold: '分红门槛',
+      receiver: '接收钱包',
+      vault: 'Vault 地址',
+      token: 'Token 合约',
+      whitelist: '白名单',
+      mintProgress: '铸造进度',
+      supply: '发行总量',
+      tradingState: '权限状态',
+      tradingFinalized: '已开盘，Token 与 Vault 权限已进入黑洞',
+      tradingPending: '内盘阶段，打满后自动开盘并丢权限',
+      enabled: '开启',
+      disabled: '关闭',
+      unallocated: '未分配',
+      toReceiver: (address: string) => `进入 ${shortAddress(address)}`,
+      toBlackHole: '进入黑洞',
+      toRewardToken: (address: string) => `指定代币 ${shortAddress(address)}`,
+      toBurn: '直接销毁',
+      taxPortionPair: (buy: string, sell: string) => (buy === sell ? buy : `买入 ${buy} / 卖出 ${sell}`),
+      copyToken: '复制 Token',
+      copyVault: '复制 Vault',
+      openExplorer: '查看 BscScan',
+      trade: '去交易',
+      noTax: '无税费',
+      tokenUnit: (symbol: string) => symbol,
     },
     swap: {
       title: 'PancakeSwap 交易',
@@ -427,6 +471,7 @@ const copy = {
       viewBscScan: 'View on BscScan',
       copyAddress: 'Copy contract',
       copied: 'Copied',
+      detail: 'Mechanism',
       trade: 'Trade',
       website: 'Website',
       fallbackDescription: `${appName} Seed launch project`,
@@ -440,6 +485,49 @@ const copy = {
       refund: 'Claim refund',
       refundAvailable: (amount: string) => `Refundable ${amount}`,
       refundTip: 'Refunds open if not sold out after 24h',
+    },
+    detail: {
+      eyebrow: 'Project details',
+      title: (name: string) => `${name} details`,
+      loading: 'Loading on-chain project details',
+      missingTitle: 'Project not found',
+      missingDesc: 'The project may still be confirming, or this token is not in the current Factory list.',
+      back: 'Back to projects',
+      mechanism: 'Token mechanism',
+      taxMechanism: 'Tax mechanism',
+      rewardBadge: (address: string) => `Reward ${shortAddress(address)}`,
+      contractBalance: 'Contract balance',
+      vaultBalanceHint: 'Vault unminted balance',
+      buyTax: 'Buy tax',
+      sellTax: 'Sell tax',
+      marketing: 'Marketing allocation',
+      liquidity: 'Buyback allocation',
+      rewards: 'Holder rewards',
+      burn: 'Burn allocation',
+      rewardThreshold: 'Reward threshold',
+      receiver: 'Receiver wallet',
+      vault: 'Vault address',
+      token: 'Token contract',
+      whitelist: 'Whitelist',
+      mintProgress: 'Mint progress',
+      supply: 'Total supply',
+      tradingState: 'Permission state',
+      tradingFinalized: 'Trading is live. Token and Vault ownership are in the black hole.',
+      tradingPending: 'Launch phase. Sellout automatically opens trading and burns permissions.',
+      enabled: 'Enabled',
+      disabled: 'Off',
+      unallocated: 'Unallocated',
+      toReceiver: (address: string) => `Sent to ${shortAddress(address)}`,
+      toBlackHole: 'Sent to black hole',
+      toRewardToken: (address: string) => `Reward token ${shortAddress(address)}`,
+      toBurn: 'Burned directly',
+      taxPortionPair: (buy: string, sell: string) => (buy === sell ? buy : `Buy ${buy} / sell ${sell}`),
+      copyToken: 'Copy Token',
+      copyVault: 'Copy Vault',
+      openExplorer: 'View BscScan',
+      trade: 'Trade',
+      noTax: 'No tax',
+      tokenUnit: (symbol: string) => symbol,
     },
     swap: {
       title: 'PancakeSwap Trading',
@@ -1212,6 +1300,12 @@ function App() {
     setMenuOpen(false)
   }
 
+  const openProjectDetail = (tokenAddress: string) => {
+    window.location.hash = `#/detail?token=${tokenAddress}`
+    setPage('detail')
+    setMenuOpen(false)
+  }
+
   const openFactory = () => {
     window.open(factoryExplorerUrl, '_blank', 'noreferrer')
   }
@@ -1243,6 +1337,7 @@ function App() {
         <HomePage
           language={language}
           navigate={navigate}
+          openProjectDetail={openProjectDetail}
           openSwap={openSwap}
           projectQuery={projectQuery}
           projects={projects}
@@ -1266,6 +1361,17 @@ function App() {
           submitSwapApproval={submitSwapApproval}
           text={text}
           wallet={wallet}
+        />
+      )}
+      {page === 'detail' && (
+        <ProjectDetailPage
+          initialTokenAddress={readDetailTokenFromHash()}
+          language={language}
+          navigate={navigate}
+          openSwap={openSwap}
+          projects={projects}
+          projectsStatus={projectsStatus}
+          text={text}
         />
       )}
       {page === 'launch' && (
@@ -1430,6 +1536,7 @@ function Header({
 function HomePage({
   language,
   navigate,
+  openProjectDetail,
   openSwap,
   projectQuery,
   projects,
@@ -1443,6 +1550,7 @@ function HomePage({
 }: {
   language: Language
   navigate: (page: PageKey) => void
+  openProjectDetail: (tokenAddress: string) => void
   openSwap: (tokenAddress?: string) => void
   projectQuery: string
   projects: LaunchProject[]
@@ -1603,6 +1711,7 @@ function HomePage({
               <ProjectCard
                 key={project.token}
                 language={language}
+                openProjectDetail={openProjectDetail}
                 openSwap={openSwap}
                 project={project}
                 submitProjectRefund={submitProjectRefund}
@@ -1665,6 +1774,7 @@ function ProjectEmptyState({
 
 function ProjectCard({
   language,
+  openProjectDetail,
   openSwap,
   project,
   submitProjectRefund,
@@ -1673,6 +1783,7 @@ function ProjectCard({
   wallet,
 }: {
   language: Language
+  openProjectDetail: (tokenAddress: string) => void
   openSwap: (tokenAddress?: string) => void
   project: LaunchProject
   submitProjectRefund: (project: LaunchProject) => Promise<void>
@@ -1783,6 +1894,10 @@ function ProjectCard({
         <ExternalLink size={16} />
         {text.projects.viewBscScan}
       </button>
+      <button type="button" onClick={() => openProjectDetail(project.token)}>
+        <FileCode2 size={16} />
+        {text.projects.detail}
+      </button>
       {project.finalized && (
         <button type="button" onClick={() => openSwap(project.token)}>
           <ArrowUpDown size={16} />
@@ -1845,6 +1960,261 @@ function ProjectCard({
         </form>
       )}
     </article>
+  )
+}
+
+function ProjectDetailPage({
+  initialTokenAddress,
+  language,
+  navigate,
+  openSwap,
+  projects,
+  projectsStatus,
+  text,
+}: {
+  initialTokenAddress: string
+  language: Language
+  navigate: (page: PageKey) => void
+  openSwap: (tokenAddress?: string) => void
+  projects: LaunchProject[]
+  projectsStatus: ProjectsStatus
+  text: (typeof copy)[Language]
+}) {
+  const [copiedKey, setCopiedKey] = useState('')
+  const normalizedToken = initialTokenAddress.toLowerCase()
+  const project = projects.find((item) => item.token.toLowerCase() === normalizedToken)
+  const allocation = allocationTranslations[language]
+
+  const copyAddress = async (key: string, value: string) => {
+    await copyTextToClipboard(value)
+    setCopiedKey(key)
+    window.setTimeout(() => setCopiedKey(''), 1400)
+  }
+
+  if (projectsStatus === 'loading') {
+    return (
+      <main className="page narrow">
+        <section className="simple-panel">
+          <div className="simple-icon">
+            <Rocket size={22} />
+          </div>
+          <h1>{text.detail.loading}</h1>
+          <p>{initialTokenAddress || launchpadConfig.factoryAddress}</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (!project) {
+    return (
+      <main className="page narrow">
+        <section className="simple-panel">
+          <div className="simple-icon">
+            <AlertCircle size={22} />
+          </div>
+          <h1>{text.detail.missingTitle}</h1>
+          <p>{text.detail.missingDesc}</p>
+          <button className="submit-button" type="button" onClick={() => navigate('home')}>
+            <Rocket size={18} />
+            {text.detail.back}
+          </button>
+        </section>
+      </main>
+    )
+  }
+
+  const explorerUrl = `${BNB_CHAIN.blockExplorerUrls[0]}/address/${project.token}`
+  const splitTotal = project.fundFeeBps + project.lpFeeBps + project.dividendFeeBps + project.burnFeeBps
+  const unallocatedBps = Math.max(0, 10_000 - splitTotal)
+  const marketingSplitBps = project.fundFeeBps + unallocatedBps
+  const taxPortion = (taxBps: number, splitBps: number) => (taxBps * splitBps) / 10_000
+  const portionPair = (splitBps: number) =>
+    text.detail.taxPortionPair(
+      formatTaxPortionBps(taxPortion(project.buyTaxBps, splitBps)),
+      formatTaxPortionBps(taxPortion(project.sellTaxBps, splitBps)),
+    )
+  const taxSummary = (taxBps: number) => {
+    if (taxBps <= 0) {
+      return text.detail.noTax
+    }
+
+    const splitSummary = [
+      `${allocation.marketing.label} ${formatTaxPortionBps(taxPortion(taxBps, marketingSplitBps))}`,
+      `${allocation.liquidity.label} ${formatTaxPortionBps(taxPortion(taxBps, project.lpFeeBps))}`,
+      `${allocation.rewards.label} ${formatTaxPortionBps(taxPortion(taxBps, project.dividendFeeBps))}`,
+      `${allocation.burn.label} ${formatTaxPortionBps(taxPortion(taxBps, project.burnFeeBps))}`,
+    ]
+
+    return `${formatBps(taxBps)} (${splitSummary.join(' / ')})`
+  }
+  const progress = Math.min(100, Math.max(0, project.progress))
+
+  return (
+    <main className="page detail-page">
+      <section className="detail-hero">
+        <div className="detail-title">
+          <span>{project.symbol.slice(0, 1).toUpperCase()}</span>
+          <div>
+            <p>{text.detail.eyebrow}</p>
+            <h1>{text.detail.title(project.name)}</h1>
+            <small>
+              {project.symbol} · {shortAddress(project.token)}
+            </small>
+          </div>
+        </div>
+        <div className="detail-actions">
+          <button type="button" onClick={() => navigate('home')}>
+            <Rocket size={16} />
+            {text.detail.back}
+          </button>
+          <button type="button" onClick={() => copyAddress('token', project.token)}>
+            <Copy size={16} />
+            {copiedKey === 'token' ? text.projects.copied : text.detail.copyToken}
+          </button>
+          <button type="button" onClick={() => window.open(explorerUrl, '_blank', 'noreferrer')}>
+            <ExternalLink size={16} />
+            {text.detail.openExplorer}
+          </button>
+          {project.finalized && (
+            <button className="submit-button" type="button" onClick={() => openSwap(project.token)}>
+              <ArrowUpDown size={16} />
+              {text.detail.trade}
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section className="detail-grid">
+        <div className="mechanism-panel">
+          <div className="mechanism-head">
+            <div>
+              <p>{text.detail.taxMechanism}</p>
+              <h2>{text.detail.mechanism}</h2>
+            </div>
+            <span>{text.detail.rewardBadge(project.rewardToken)}</span>
+          </div>
+
+          <DetailRow
+            label={text.detail.contractBalance}
+            value={`${formatDisplayAmount(project.vaultTokenBalance)} ${project.symbol}`}
+            helper={text.detail.vaultBalanceHint}
+          />
+          <DetailRow label={text.detail.buyTax} value={taxSummary(project.buyTaxBps)} />
+          <DetailRow label={text.detail.sellTax} value={taxSummary(project.sellTaxBps)} />
+          <DetailRow
+            label={text.detail.marketing}
+            value={`${portionPair(marketingSplitBps)} -> ${text.detail.toReceiver(project.receiver)}`}
+          />
+          <DetailRow
+            label={text.detail.liquidity}
+            value={`${portionPair(project.lpFeeBps)} -> ${text.detail.toBlackHole}`}
+          />
+          <DetailRow
+            label={text.detail.rewards}
+            value={`${portionPair(project.dividendFeeBps)} -> ${text.detail.toRewardToken(project.rewardToken)}`}
+          />
+          <DetailRow
+            label={text.detail.burn}
+            value={`${portionPair(project.burnFeeBps)} -> ${text.detail.toBurn}`}
+          />
+          <DetailRow
+            label={text.detail.rewardThreshold}
+            value={`${formatDisplayAmount(project.rewardThreshold)} ${text.detail.tokenUnit(project.symbol)}`}
+          />
+          <DetailRow
+            label={text.detail.tradingState}
+            value={project.finalized ? text.detail.tradingFinalized : text.detail.tradingPending}
+          />
+        </div>
+
+        <aside className="detail-side">
+          <div className="detail-stat-panel">
+            <p>{text.detail.mintProgress}</p>
+            <strong>{progress.toFixed(2)}%</strong>
+            <div className="progress-track">
+              <i style={{ width: `${progress}%` }} />
+            </div>
+            <span>
+              {project.mintedCount}/{project.mintCount}
+            </span>
+          </div>
+
+          <div className="detail-stat-list">
+            <DetailMiniStat label={text.detail.supply} value={`${formatDisplayAmount(project.totalSupply)} ${project.symbol}`} />
+            <DetailMiniStat
+              label={text.detail.whitelist}
+              value={project.whitelistEnabled ? text.detail.enabled : text.detail.disabled}
+            />
+            <DetailMiniStat label={text.detail.receiver} value={shortAddress(project.receiver)} />
+          </div>
+
+          <div className="address-panel">
+            <AddressLine
+              copied={copiedKey === 'token'}
+              label={text.detail.token}
+              value={project.token}
+              copiedText={text.projects.copied}
+              copyText={text.detail.copyToken}
+              onCopy={() => copyAddress('token', project.token)}
+            />
+            <AddressLine
+              copied={copiedKey === 'vault'}
+              label={text.detail.vault}
+              value={project.vault}
+              copiedText={text.projects.copied}
+              copyText={text.detail.copyVault}
+              onCopy={() => copyAddress('vault', project.vault)}
+            />
+          </div>
+        </aside>
+      </section>
+    </main>
+  )
+}
+
+function DetailRow({ helper, label, value }: { helper?: string; label: string; value: string }) {
+  return (
+    <div className="detail-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {helper && <em>{helper}</em>}
+    </div>
+  )
+}
+
+function DetailMiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function AddressLine({
+  copied,
+  copiedText,
+  copyText,
+  label,
+  onCopy,
+  value,
+}: {
+  copied: boolean
+  copiedText: string
+  copyText: string
+  label: string
+  onCopy: () => void
+  value: string
+}) {
+  return (
+    <div className="address-line">
+      <span>{label}</span>
+      <strong>{shortAddress(value)}</strong>
+      <button type="button" onClick={onCopy}>
+        <Copy size={14} />
+        {copied ? copiedText : copyText}
+      </button>
+    </div>
   )
 }
 
@@ -2863,6 +3233,39 @@ function readPageFromHash(): PageKey {
 function readSwapTokenFromHash() {
   const query = window.location.hash.split('?')[1] ?? ''
   return new URLSearchParams(query).get('token') ?? ''
+}
+
+function readDetailTokenFromHash() {
+  const query = window.location.hash.split('?')[1] ?? ''
+  return new URLSearchParams(query).get('token') ?? ''
+}
+
+function formatBps(value: number) {
+  const percent = Number(value || 0) / 100
+  const fixed = percent % 1 === 0 ? percent.toFixed(0) : percent.toFixed(2)
+  const trimmed = fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed
+
+  return `${trimmed}%`
+}
+
+function formatTaxPortionBps(value: number) {
+  const percent = Number(value || 0) / 100
+
+  if (!Number.isFinite(percent) || percent <= 0) {
+    return '0%'
+  }
+
+  return `${percent.toFixed(2)}%`
+}
+
+function formatDisplayAmount(value: string) {
+  const rawValue = String(value || '0')
+  const [whole = '0', fraction = ''] = rawValue.split('.')
+  const cleanFraction = fraction.replace(/0+$/, '').slice(0, 4)
+  const cleanWhole = whole.replace(/^0+(?=\d)/, '') || '0'
+  const groupedWhole = cleanWhole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+
+  return cleanFraction ? `${groupedWhole}.${cleanFraction}` : groupedWhole
 }
 
 function slippageToBps(value: string) {

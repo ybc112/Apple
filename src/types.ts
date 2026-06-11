@@ -83,6 +83,15 @@ export type LaunchProject = {
   refundNeedsApproval: boolean
   userRefundAmount: string
   canRefund: boolean
+  rewardToken: string
+  rewardThreshold: string
+  buyTaxBps: number
+  sellTaxBps: number
+  fundFeeBps: number
+  lpFeeBps: number
+  dividendFeeBps: number
+  burnFeeBps: number
+  vaultTokenBalance: string
   progress: number
   whitelistEnabled: boolean
   createdAt: number
