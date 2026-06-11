@@ -7,10 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "backend": "node server/apple-backend.mjs",
     "contracts:compile": "hardhat compile",
     "contracts:test": "hardhat test",
     "contracts:deploy": "hardhat run scripts/deploy-factory.ts --network bsc",
-    "contracts:deploy:audit": "hardhat run scripts/deploy-audit-registry.ts --network bsc"
+    "contracts:deploy:audit": "hardhat run scripts/deploy-audit-registry.ts --network bsc",
+    "contracts:verify:project": "hardhat run scripts/verify-project.ts --network bsc"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.13",
