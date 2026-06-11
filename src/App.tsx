@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  ArrowUpDown,
   AtSign,
   CheckCircle2,
   ChevronDown,
@@ -40,6 +41,16 @@ import {
   waitForTransactionReceipt,
 } from './contracts/launchpad'
 import {
+  PANCAKE_V2_ROUTER_ADDRESS,
+  approvePancakeSwapToken,
+  buildPancakeSwapUrl,
+  executePancakeSwap,
+  fetchPancakeSwapQuote,
+  type PancakeSwapDirection,
+  type PancakeSwapQuote,
+  type PancakeSwapRequest,
+} from './contracts/pancake'
+import {
   applyForAuditor,
   fetchAuditDashboard,
   isAuditRegistryConfigured,
@@ -71,7 +82,7 @@ import {
   targetChainId,
 } from './wallet'
 
-const pages: PageKey[] = ['home', 'launch', 'auditors', 'verify']
+const pages: PageKey[] = ['home', 'launch', 'auditors', 'verify', 'swap']
 const appName = String(import.meta.env.VITE_APP_NAME ?? 'Apple')
 const appSymbol = String(import.meta.env.VITE_APP_SYMBOL ?? 'APPLE')
 const factoryExplorerUrl = `${BNB_CHAIN.blockExplorerUrls[0]}/address/${launchpadConfig.factoryAddress}#code`
@@ -111,6 +122,7 @@ const copy = {
       home: '返回首页',
       auditors: '审核员',
       verify: '合约开源',
+      swap: '交易所',
       launch: '部署代币',
     },
     notice: {
@@ -126,6 +138,12 @@ const copy = {
       confirmRefund: '请在钱包里确认退款交易。退款会把你的代币退回 Vault，再退回付款。',
       refundSubmitted: (hash: string) => `退款交易已提交：${hash}，正在等待链上确认。`,
       refundConfirmed: '退款已完成。',
+      confirmSwapApproval: '请在钱包里授权 PancakeSwap Router 使用你的代币。',
+      swapApprovalSubmitted: (hash: string) => `Swap 授权已提交：${hash}，正在等待链上确认。`,
+      swapApprovalConfirmed: 'Swap 授权已确认。',
+      confirmSwap: '请在钱包里确认 PancakeSwap 兑换交易。',
+      swapSubmitted: (hash: string) => `Swap 交易已提交：${hash}，正在等待链上确认。`,
+      swapConfirmed: 'Swap 交易已确认。',
       confirmAuditorApply: '请在钱包里确认审核员申请交易。',
       auditorApplySubmitted: (hash: string) => `审核员申请已提交：${hash}，正在等待链上确认。`,
       auditorApplyConfirmed: '审核员申请已写入链上，等待管理员批准。',
@@ -179,6 +197,7 @@ const copy = {
       viewBscScan: '在 BscScan 查看',
       copyAddress: '复制合约',
       copied: '已复制',
+      trade: '去交易',
       website: '官网',
       fallbackDescription: `${appName} 链上发射项目`,
       quota: (whitelistMinted: string, whitelistTotal: string, publicMinted: string, publicTotal: string) =>
@@ -191,6 +210,29 @@ const copy = {
       refund: '申请退款',
       refundAvailable: (amount: string) => `可退款 ${amount}`,
       refundTip: '24 小时未打满后可退款',
+    },
+    swap: {
+      title: 'PancakeSwap 交易',
+      desc: '通过 PancakeSwap V2 Router 直接兑换，成交取决于项目是否已经添加 BNB 流动性。',
+      selectProject: '选择项目',
+      customToken: '自定义代币',
+      tokenAddress: '代币合约地址',
+      amount: '数量',
+      slippage: '滑点',
+      buy: '买入',
+      sell: '卖出',
+      quote: '获取报价',
+      refresh: '刷新报价',
+      approve: '授权代币',
+      swap: '确认兑换',
+      pending: '等待确认',
+      route: '路由',
+      expected: '预计得到',
+      minimum: '最低收到',
+      router: '薄饼 Router',
+      noProjects: '暂无已开盘项目，可以手动输入已加 LP 的代币合约。',
+      quoteHint: '报价来自 PancakeSwap，含税代币实际到账可能低于显示值。',
+      openPancake: '打开薄饼',
     },
     launch: {
       network: '当前网络',
@@ -310,6 +352,7 @@ const copy = {
       home: 'Home',
       auditors: 'Auditors',
       verify: 'Verified',
+      swap: 'Swap',
       launch: 'Launch token',
     },
     notice: {
@@ -325,6 +368,12 @@ const copy = {
       confirmRefund: 'Confirm the refund transaction. Your tokens will be returned to the Vault before payment is refunded.',
       refundSubmitted: (hash: string) => `Refund transaction submitted: ${hash}. Waiting for confirmation.`,
       refundConfirmed: 'Refund complete.',
+      confirmSwapApproval: 'Approve the PancakeSwap Router to use your tokens.',
+      swapApprovalSubmitted: (hash: string) => `Swap approval submitted: ${hash}. Waiting for confirmation.`,
+      swapApprovalConfirmed: 'Swap approval confirmed.',
+      confirmSwap: 'Confirm the PancakeSwap transaction in your wallet.',
+      swapSubmitted: (hash: string) => `Swap transaction submitted: ${hash}. Waiting for confirmation.`,
+      swapConfirmed: 'Swap transaction confirmed.',
       confirmAuditorApply: 'Confirm the auditor application transaction in your wallet.',
       auditorApplySubmitted: (hash: string) => `Auditor application submitted: ${hash}. Waiting for confirmation.`,
       auditorApplyConfirmed: 'Auditor application is recorded on-chain and waiting for admin approval.',
@@ -378,6 +427,7 @@ const copy = {
       viewBscScan: 'View on BscScan',
       copyAddress: 'Copy contract',
       copied: 'Copied',
+      trade: 'Trade',
       website: 'Website',
       fallbackDescription: `${appName} Seed launch project`,
       quota: (whitelistMinted: string, whitelistTotal: string, publicMinted: string, publicTotal: string) =>
@@ -390,6 +440,29 @@ const copy = {
       refund: 'Claim refund',
       refundAvailable: (amount: string) => `Refundable ${amount}`,
       refundTip: 'Refunds open if not sold out after 24h',
+    },
+    swap: {
+      title: 'PancakeSwap Trading',
+      desc: 'Swap directly through the PancakeSwap V2 Router. Execution depends on the project having BNB liquidity.',
+      selectProject: 'Select project',
+      customToken: 'Custom token',
+      tokenAddress: 'Token contract address',
+      amount: 'Amount',
+      slippage: 'Slippage',
+      buy: 'Buy',
+      sell: 'Sell',
+      quote: 'Get quote',
+      refresh: 'Refresh quote',
+      approve: 'Approve token',
+      swap: 'Confirm swap',
+      pending: 'Waiting',
+      route: 'Route',
+      expected: 'Expected output',
+      minimum: 'Minimum received',
+      router: 'Pancake Router',
+      noProjects: 'No trading projects yet. You can manually enter a token that already has LP.',
+      quoteHint: 'Quote comes from PancakeSwap. Taxed tokens may arrive below the displayed estimate.',
+      openPancake: 'Open Pancake',
     },
     launch: {
       network: 'Current network',
@@ -1091,9 +1164,51 @@ function App() {
     }
   }
 
+  const submitSwapApproval = async (tokenAddress: string, amountIn: string) => {
+    try {
+      const provider = await prepareWalletTransaction()
+      if (!provider) {
+        return
+      }
+
+      setNotice({ kind: 'info', message: text.notice.confirmSwapApproval })
+      const result = await approvePancakeSwapToken(provider, tokenAddress, amountIn, language)
+      setNotice({ kind: 'info', message: text.notice.swapApprovalSubmitted(shortHash(result.hash)) })
+      await waitForTransactionReceipt(provider, result.hash, 120_000, language)
+      setNotice({ kind: 'success', message: text.notice.swapApprovalConfirmed })
+    } catch (error) {
+      setNotice({ kind: 'error', message: readProviderErrorMessage(error) })
+      throw error
+    }
+  }
+
+  const submitSwap = async (request: PancakeSwapRequest) => {
+    try {
+      const provider = await prepareWalletTransaction()
+      if (!provider) {
+        return
+      }
+
+      setNotice({ kind: 'info', message: text.notice.confirmSwap })
+      const result = await executePancakeSwap(provider, { ...request, locale: language })
+      setNotice({ kind: 'info', message: text.notice.swapSubmitted(shortHash(result.hash)) })
+      await waitForTransactionReceipt(provider, result.hash, 120_000, language)
+      setNotice({ kind: 'success', message: text.notice.swapConfirmed })
+    } catch (error) {
+      setNotice({ kind: 'error', message: readProviderErrorMessage(error) })
+      throw error
+    }
+  }
+
   const navigate = (nextPage: PageKey) => {
     window.location.hash = nextPage === 'home' ? '#/' : `#/${nextPage}`
     setPage(nextPage)
+    setMenuOpen(false)
+  }
+
+  const openSwap = (tokenAddress?: string) => {
+    window.location.hash = tokenAddress ? `#/swap?token=${tokenAddress}` : '#/swap'
+    setPage('swap')
     setMenuOpen(false)
   }
 
@@ -1128,6 +1243,7 @@ function App() {
         <HomePage
           language={language}
           navigate={navigate}
+          openSwap={openSwap}
           projectQuery={projectQuery}
           projects={projects}
           projectsError={projectsError}
@@ -1135,6 +1251,19 @@ function App() {
           setProjectQuery={setProjectQuery}
           submitProjectRefund={submitProjectRefund}
           submitWhitelistAllowance={submitWhitelistAllowance}
+          text={text}
+          wallet={wallet}
+        />
+      )}
+      {page === 'swap' && (
+        <SwapPage
+          connectWallet={connectWallet}
+          initialTokenAddress={readSwapTokenFromHash()}
+          language={language}
+          projects={projects}
+          projectsStatus={projectsStatus}
+          submitSwap={submitSwap}
+          submitSwapApproval={submitSwapApproval}
           text={text}
           wallet={wallet}
         />
@@ -1214,6 +1343,7 @@ function Header({
 }) {
   const nav = [
     { page: 'home' as PageKey, label: text.nav.home, icon: <Home size={17} /> },
+    { page: 'swap' as PageKey, label: text.nav.swap, icon: <ArrowUpDown size={17} /> },
     { page: 'auditors' as PageKey, label: text.nav.auditors, icon: <ShieldCheck size={17} /> },
     { page: 'verify' as PageKey, label: text.nav.verify, icon: <FileCode2 size={17} /> },
   ]
@@ -1239,7 +1369,13 @@ function Header({
         </span>
         <span>
           <strong>{appName}</strong>
-          <small>{activePage === 'launch' ? 'Seed' : activePage === 'auditors' ? 'Audit' : 'Launch'}</small>
+          <small>
+            {activePage === 'launch'
+              ? 'Seed'
+              : activePage === 'auditors'
+                ? 'Audit'
+                : activePage === 'swap' ? 'Swap' : 'Launch'}
+          </small>
         </span>
       </a>
 
@@ -1294,6 +1430,7 @@ function Header({
 function HomePage({
   language,
   navigate,
+  openSwap,
   projectQuery,
   projects,
   projectsError,
@@ -1306,6 +1443,7 @@ function HomePage({
 }: {
   language: Language
   navigate: (page: PageKey) => void
+  openSwap: (tokenAddress?: string) => void
   projectQuery: string
   projects: LaunchProject[]
   projectsError: string
@@ -1465,6 +1603,7 @@ function HomePage({
               <ProjectCard
                 key={project.token}
                 language={language}
+                openSwap={openSwap}
                 project={project}
                 submitProjectRefund={submitProjectRefund}
                 submitWhitelistAllowance={submitWhitelistAllowance}
@@ -1526,6 +1665,7 @@ function ProjectEmptyState({
 
 function ProjectCard({
   language,
+  openSwap,
   project,
   submitProjectRefund,
   submitWhitelistAllowance,
@@ -1533,6 +1673,7 @@ function ProjectCard({
   wallet,
 }: {
   language: Language
+  openSwap: (tokenAddress?: string) => void
   project: LaunchProject
   submitProjectRefund: (project: LaunchProject) => Promise<void>
   submitWhitelistAllowance: (project: LaunchProject, account: string, allowance: string) => Promise<void>
@@ -1640,6 +1781,12 @@ function ProjectCard({
         <ExternalLink size={16} />
         {text.projects.viewBscScan}
       </button>
+      {project.finalized && (
+        <button type="button" onClick={() => openSwap(project.token)}>
+          <ArrowUpDown size={16} />
+          {text.projects.trade}
+        </button>
+      )}
       {project.canRefund && (
         <button
           type="button"
@@ -1696,6 +1843,252 @@ function ProjectCard({
         </form>
       )}
     </article>
+  )
+}
+
+function SwapPage({
+  connectWallet,
+  initialTokenAddress,
+  language,
+  projects,
+  projectsStatus,
+  submitSwap,
+  submitSwapApproval,
+  text,
+  wallet,
+}: {
+  connectWallet: () => void
+  initialTokenAddress: string
+  language: Language
+  projects: LaunchProject[]
+  projectsStatus: ProjectsStatus
+  submitSwap: (request: PancakeSwapRequest) => Promise<void>
+  submitSwapApproval: (tokenAddress: string, amountIn: string) => Promise<void>
+  text: (typeof copy)[Language]
+  wallet: WalletState
+}) {
+  const [tokenAddress, setTokenAddress] = useState(initialTokenAddress)
+  const [direction, setDirection] = useState<PancakeSwapDirection>('buy')
+  const [amount, setAmount] = useState('')
+  const [slippage, setSlippage] = useState('8')
+  const [quote, setQuote] = useState<PancakeSwapQuote | null>(null)
+  const [quoteStatus, setQuoteStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [quoteError, setQuoteError] = useState('')
+  const [pendingAction, setPendingAction] = useState('')
+  const tradableProjects = projects.filter((project) => project.finalized)
+  const selectedProject = tradableProjects.find(
+    (project) => project.token.toLowerCase() === tokenAddress.trim().toLowerCase(),
+  )
+
+  useEffect(() => {
+    if (initialTokenAddress) {
+      setTokenAddress(initialTokenAddress)
+    }
+  }, [initialTokenAddress])
+
+  useEffect(() => {
+    setQuote(null)
+    setQuoteError('')
+    setQuoteStatus('idle')
+  }, [amount, direction, slippage, tokenAddress])
+
+  const readQuote = async () => {
+    setQuoteStatus('loading')
+    setQuoteError('')
+
+    try {
+      const nextQuote = await fetchPancakeSwapQuote({
+        tokenAddress,
+        amount,
+        direction,
+        slippageBps: slippageToBps(slippage),
+        account: wallet.account,
+        locale: language,
+      })
+      setQuote(nextQuote)
+      setQuoteStatus('ready')
+    } catch (error) {
+      setQuote(null)
+      setQuoteStatus('error')
+      setQuoteError(readProviderErrorMessage(error))
+    }
+  }
+
+  const approve = async () => {
+    if (!quote) {
+      return
+    }
+
+    setPendingAction('approve')
+    try {
+      await submitSwapApproval(tokenAddress, quote.amountIn)
+      await readQuote()
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  const swap = async () => {
+    setPendingAction('swap')
+    try {
+      await submitSwap({
+        tokenAddress,
+        amount,
+        direction,
+        slippageBps: slippageToBps(slippage),
+        locale: language,
+      })
+      setQuote(null)
+      setQuoteStatus('idle')
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  return (
+    <main className="page narrow">
+      <section className="swap-hero">
+        <div>
+          <p>PancakeSwap V2</p>
+          <h1>{text.swap.title}</h1>
+          <span>{text.swap.desc}</span>
+        </div>
+        <button className="wallet-button" type="button" onClick={connectWallet}>
+          <Wallet size={17} />
+          {wallet.account ? shortAddress(wallet.account) : text.wallet.connect}
+        </button>
+      </section>
+
+      <section className="swap-grid">
+        <form
+          className="swap-card"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void readQuote()
+          }}
+        >
+          <div className="swap-mode" role="group" aria-label={text.swap.title}>
+            <button
+              className={direction === 'buy' ? 'active' : ''}
+              type="button"
+              onClick={() => setDirection('buy')}
+            >
+              {text.swap.buy}
+            </button>
+            <button
+              className={direction === 'sell' ? 'active' : ''}
+              type="button"
+              onClick={() => setDirection('sell')}
+            >
+              {text.swap.sell}
+            </button>
+          </div>
+
+          <label className="field">
+            <span>{text.swap.selectProject}</span>
+            <select
+              value={selectedProject ? selectedProject.token : 'custom'}
+              onChange={(event) => {
+                if (event.target.value !== 'custom') {
+                  setTokenAddress(event.target.value)
+                }
+              }}
+            >
+              <option value="custom">{text.swap.customToken}</option>
+              {tradableProjects.map((project) => (
+                <option key={project.token} value={project.token}>
+                  {project.name} ({project.symbol})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <InputField label={text.swap.tokenAddress} value={tokenAddress} onChange={setTokenAddress} />
+
+          <div className="fields two">
+            <InputField label={`${text.swap.amount} ${direction === 'buy' ? 'BNB' : quote?.tokenSymbol ?? ''}`} value={amount} onChange={setAmount} />
+            <InputField label={text.swap.slippage} value={slippage} onChange={setSlippage} />
+          </div>
+
+          <button className="submit-button" type="submit" disabled={quoteStatus === 'loading'}>
+            <ArrowUpDown size={18} />
+            {quoteStatus === 'loading' ? text.swap.pending : quote ? text.swap.refresh : text.swap.quote}
+          </button>
+
+          {projectsStatus !== 'loading' && tradableProjects.length === 0 && (
+            <p className="muted-line">{text.swap.noProjects}</p>
+          )}
+
+          {quoteError && (
+            <div className="config-warning compact-warning">
+              <AlertCircle size={17} />
+              {quoteError}
+            </div>
+          )}
+
+          {quote && (
+            <div className="swap-quote">
+              <div>
+                <span>{text.swap.route}</span>
+                <strong>{quote.routeLabel}</strong>
+              </div>
+              <div>
+                <span>{text.swap.expected}</span>
+                <strong>
+                  {quote.formattedAmountOut} {quote.targetSymbol}
+                </strong>
+              </div>
+              <div>
+                <span>{text.swap.minimum}</span>
+                <strong>
+                  {quote.formattedMinimumAmountOut} {quote.targetSymbol}
+                </strong>
+              </div>
+            </div>
+          )}
+
+          <div className="swap-actions">
+            {quote?.needsApproval && (
+              <button type="button" disabled={pendingAction === 'approve'} onClick={approve}>
+                <Wallet size={16} />
+                {pendingAction === 'approve' ? text.swap.pending : text.swap.approve}
+              </button>
+            )}
+            <button
+              className="submit-button"
+              type="button"
+              disabled={!quote || quote.needsApproval || pendingAction === 'swap'}
+              onClick={swap}
+            >
+              <ArrowUpDown size={18} />
+              {pendingAction === 'swap' ? text.swap.pending : text.swap.swap}
+            </button>
+          </div>
+        </form>
+
+        <aside className="swap-card swap-side">
+          <div className="audit-facts">
+            <div>
+              <span>{text.swap.router}</span>
+              <strong>{shortAddress(PANCAKE_V2_ROUTER_ADDRESS)}</strong>
+            </div>
+            <div>
+              <span>{text.swap.route}</span>
+              <strong>{quote?.routeLabel ?? (direction === 'buy' ? 'BNB -> TOKEN' : 'TOKEN -> BNB')}</strong>
+            </div>
+          </div>
+          <p className="muted-line">{text.swap.quoteHint}</p>
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => window.open(buildPancakeSwapUrl(tokenAddress, direction), '_blank', 'noreferrer')}
+          >
+            <ExternalLink size={17} />
+            {text.swap.openPancake}
+          </button>
+        </aside>
+      </section>
+    </main>
   )
 }
 
@@ -2463,6 +2856,20 @@ function readLanguagePreference(): Language {
 function readPageFromHash(): PageKey {
   const rawPage = window.location.hash.replace(/^#\/?/, '').split('?')[0]
   return pages.includes(rawPage as PageKey) ? (rawPage as PageKey) : 'home'
+}
+
+function readSwapTokenFromHash() {
+  const query = window.location.hash.split('?')[1] ?? ''
+  return new URLSearchParams(query).get('token') ?? ''
+}
+
+function slippageToBps(value: string) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return 0
+  }
+
+  return Math.round(parsed * 100)
 }
 
 function shortHash(hash: string) {

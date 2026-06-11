@@ -134,7 +134,19 @@ Frontend integration:
 - If the connected wallet is the registry owner, the frontend shows auditor approval controls.
 - If the connected wallet is an approved auditor, the frontend enables project-review submission.
 
-The Swap page and Swap navigation were removed. There is no placeholder swap module in the UI.
+## PancakeSwap Integration
+
+The Swap page is a real frontend integration with PancakeSwap V2 Router on BNB Chain.
+
+- Router: `0x10ED43C718714eb63d5aA57B78B54704E256024E`.
+- The UI supports `BNB -> project token` and `project token -> BNB`.
+- Quotes are read from `getAmountsOut`.
+- Buy swaps call `swapExactETHForTokensSupportingFeeOnTransferTokens`.
+- Sell swaps call `swapExactTokensForETHSupportingFeeOnTransferTokens`.
+- Sell swaps require an ERC20 `approve` transaction before calling the router if allowance is insufficient.
+- The project does not deploy or control a custom swap contract; funds go directly through PancakeSwap.
+- If a launched token has no BNB liquidity, the UI shows a quote/liquidity error instead of pretending a trade can execute.
+- Taxed tokens can receive less than the displayed quote because Pancake quotes do not fully model transfer-tax behavior; the UI shows a warning for this.
 
 ## Deployment Flow
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-export type PageKey = 'home' | 'launch' | 'templates' | 'auditors' | 'verify' | 'detail'
+export type PageKey = 'home' | 'launch' | 'templates' | 'auditors' | 'verify' | 'swap' | 'detail'
 
 export type TemplateId =
   | 'standard'
