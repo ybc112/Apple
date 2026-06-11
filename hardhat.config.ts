@@ -2,10 +2,11 @@ import "dotenv/config";
 
 import hardhatEthers from "@nomicfoundation/hardhat-ethers";
 import hardhatMocha from "@nomicfoundation/hardhat-mocha";
+import hardhatVerify from "@nomicfoundation/hardhat-verify";
 import { configVariable, defineConfig } from "hardhat/config";
 
 export default defineConfig({
-  plugins: [hardhatEthers, hardhatMocha],
+  plugins: [hardhatEthers, hardhatMocha, hardhatVerify],
   solidity: {
     profiles: {
       default: {
@@ -40,6 +41,14 @@ export default defineConfig({
       chainType: "l1",
       url: configVariable("BSC_RPC_URL"),
       accounts: [configVariable("PRIVATE_KEY")],
+    },
+  },
+  verify: {
+    blockscout: {
+      enabled: false,
+    },
+    etherscan: {
+      apiKey: configVariable("BSCSCAN_API_KEY"),
     },
   },
 });

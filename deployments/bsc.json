@@ -1,0 +1,10 @@
+{
+  "network": "bsc",
+  "chainId": 56,
+  "factory": "0x924aF77296c67a613893373Eef2ae0dd2318e0C2",
+  "feeRecipient": "0x0D70FABE5B212f5BE5EFa503a2Dcc4D5C54B6347",
+  "creationFeeWei": "5000000000000000",
+  "creationFeeBnb": "0.005",
+  "deploymentTx": "0x3b8a8317ee588ceae62fda63d43ca253e4e79ab57f12512d1ad0c333cef7de62",
+  "blockNumber": 103586497
+}

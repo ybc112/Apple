@@ -62,6 +62,14 @@ The whitelist allowance is quantity-based, not token-amount-based. For example, 
 7. Vault ownership belongs to the project receiver.
 8. If whitelist mode is enabled, receiver sets whitelist allowances before mint starts.
 
+## BNB Chain Deployment
+
+- Network: BNB Smart Chain mainnet (`chainId: 56`).
+- Factory: `0x924aF77296c67a613893373Eef2ae0dd2318e0C2`.
+- Deployment transaction: `0x3b8a8317ee588ceae62fda63d43ca253e4e79ab57f12512d1ad0c333cef7de62`.
+- Fee recipient: `0x0D70FABE5B212f5BE5EFa503a2Dcc4D5C54B6347`.
+- Creation fee: `0.005 BNB`.
+
 ## Test Coverage
 
 Current tests cover:
