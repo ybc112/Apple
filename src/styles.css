@@ -807,6 +807,22 @@ a {
   font-weight: 850;
 }
 
+.refund-state {
+  padding: 9px 11px;
+  border: 1px solid rgba(104, 164, 154, 0.18);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.refund-state.available {
+  border-color: rgba(141, 247, 196, 0.36);
+  color: var(--accent);
+  background: rgba(141, 247, 196, 0.08);
+}
+
 .project-links {
   display: flex;
   gap: 8px;

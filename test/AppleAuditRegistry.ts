@@ -90,12 +90,25 @@ describe("AppleAuditRegistry", function () {
     expect(reviews[0].reportUri).to.equal("ipfs://updated-report");
   });
 
-  it("only the owner can approve or suspend auditors", async function () {
+  it("only the owner can approve auditors", async function () {
     const { auditor, stranger, registry } = await deployRegistry();
 
     let blocked = false;
     try {
       await registry.connect(stranger).setAuditorStatus(auditor.address, 2);
+    } catch {
+      blocked = true;
+    }
+
+    expect(blocked).to.equal(true);
+  });
+
+  it("does not expose a suspended auditor state", async function () {
+    const { auditor, registry } = await deployRegistry();
+
+    let blocked = false;
+    try {
+      await registry.setAuditorStatus(auditor.address, 3);
     } catch {
       blocked = true;
     }

@@ -18,6 +18,7 @@ contract AppleToken is ERC20, Ownable {
     address public paymentToken;
     address public rewardToken;
     uint256 public rewardThreshold;
+    bool public tradingEnabled;
 
     uint16 public buyTaxBps;
     uint16 public sellTaxBps;
@@ -30,6 +31,8 @@ contract AppleToken is ERC20, Ownable {
     mapping(address pair => bool enabled) public automatedMarketMakerPairs;
 
     error InvalidTax();
+    error NotLaunchVault();
+    error TradingLocked();
     error VaultAlreadySet();
     error ZeroAddress();
 
@@ -58,6 +61,7 @@ contract AppleToken is ERC20, Ownable {
     event ReceiverUpdated(address indexed receiver);
     event DividendReceiverUpdated(address indexed dividendReceiver);
     event RewardConfigUpdated(address indexed rewardToken, uint256 rewardThreshold);
+    event TradingEnabled();
     event TaxConfigUpdated(
         uint16 buyTaxBps,
         uint16 sellTaxBps,
@@ -119,6 +123,18 @@ contract AppleToken is ERC20, Ownable {
         launchVault = vault;
         isTaxExempt[vault] = true;
         emit LaunchVaultSet(vault);
+    }
+
+    function finalizeLaunch() external {
+        if (msg.sender != launchVault) {
+            revert NotLaunchVault();
+        }
+        if (tradingEnabled) {
+            return;
+        }
+
+        tradingEnabled = true;
+        emit TradingEnabled();
     }
 
     function setTaxes(TaxConfig calldata taxConfig) external onlyOwner {
@@ -201,6 +217,10 @@ contract AppleToken is ERC20, Ownable {
         ) {
             super._update(from, to, value);
             return;
+        }
+
+        if (!tradingEnabled) {
+            revert TradingLocked();
         }
 
         uint16 taxBps = automatedMarketMakerPairs[from]

@@ -8,8 +8,7 @@ contract AppleAuditRegistry is Ownable, ReentrancyGuard {
     enum AuditorStatus {
         None,
         Applied,
-        Approved,
-        Suspended
+        Approved
     }
 
     enum RiskLevel {

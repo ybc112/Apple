@@ -76,6 +76,13 @@ export type LaunchProject = {
   whitelistMintCount: string
   publicMintedCount: string
   whitelistMintedCount: string
+  refundDeadline: number
+  finalized: boolean
+  userMintedCount: string
+  refundTokenAmount: string
+  refundNeedsApproval: boolean
+  userRefundAmount: string
+  canRefund: boolean
   progress: number
   whitelistEnabled: boolean
   createdAt: number

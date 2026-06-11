@@ -5,6 +5,11 @@ import { network } from "hardhat";
 const { ethers } = await network.create();
 
 describe("AppleLaunchFactory", function () {
+  async function increaseTime(seconds: number) {
+    await ethers.provider.send("evm_increaseTime", [seconds]);
+    await ethers.provider.send("evm_mine", []);
+  }
+
   async function deployFactory() {
     const [owner, creator, buyer, pair, dividendReceiver] = await ethers.getSigners();
     const creationFee = ethers.parseEther("0.005");
@@ -92,6 +97,122 @@ describe("AppleLaunchFactory", function () {
 
     expect(await vault.mintedCount()).to.equal(2n);
     expect(await token.balanceOf(buyer.address)).to.equal((params.totalSupply / params.mintCount) * 2n);
+    expect(await ethers.provider.getBalance(project.vault)).to.equal(params.mintPrice * 2n);
+    expect(await vault.finalized()).to.equal(false);
+  });
+
+  it("refunds buyers after 24 hours when the launch is not sold out", async function () {
+    const { creator, buyer, creationFee, factory } = await deployFactory();
+    const params = launchParams(creator.address);
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-refund-window"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+    const quantity = 2n;
+    const cost = params.mintPrice * quantity;
+    const tokenAmount = (params.totalSupply / params.mintCount) * quantity;
+
+    await vault.connect(buyer).mint(quantity, { value: cost });
+
+    let earlyRefundBlocked = false;
+    try {
+      await vault.connect(buyer).claimRefund();
+    } catch {
+      earlyRefundBlocked = true;
+    }
+
+    expect(earlyRefundBlocked).to.equal(true);
+
+    await increaseTime(24 * 60 * 60 + 1);
+    await token.connect(buyer).approve(project.vault, tokenAmount);
+    await vault.connect(buyer).claimRefund();
+
+    expect(await vault.paidByWallet(buyer.address)).to.equal(0n);
+    expect(await vault.mintedByWallet(buyer.address)).to.equal(0n);
+    expect(await vault.mintedCount()).to.equal(0n);
+    expect(await vault.refundedCount()).to.equal(quantity);
+    expect(await vault.refundedPayment()).to.equal(cost);
+    expect(await token.balanceOf(buyer.address)).to.equal(0n);
+    expect(await token.balanceOf(project.vault)).to.equal(params.totalSupply);
+    expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
+  });
+
+  it("finalizes the launch, enables trading, and pays the receiver when sold out", async function () {
+    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(dividendReceiver.address),
+      mintCount: 2n,
+    };
+    const cost = params.mintPrice * params.mintCount;
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-finalize"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+    const receiverBefore = await ethers.provider.getBalance(dividendReceiver.address);
+
+    expect(await token.tradingEnabled()).to.equal(false);
+    await vault.connect(buyer).mint(params.mintCount, { value: cost });
+
+    expect(await vault.finalized()).to.equal(true);
+    expect(await token.tradingEnabled()).to.equal(true);
+    expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
+    expect((await ethers.provider.getBalance(dividendReceiver.address)) - receiverBefore).to.equal(cost);
+
+    await increaseTime(24 * 60 * 60 + 1);
+
+    let refundBlocked = false;
+    try {
+      await vault.connect(buyer).claimRefund();
+    } catch {
+      refundBlocked = true;
+    }
+
+    expect(refundBlocked).to.equal(true);
+  });
+
+  it("locks normal transfers before sellout and unlocks them automatically after sellout", async function () {
+    const { creator, buyer, pair, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-trading-lock"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+    const tokensPerMint = params.totalSupply / params.mintCount;
+
+    await token.connect(creator).setAutomatedMarketMakerPair(pair.address, true);
+    await vault.connect(buyer).mint(1n, { value: params.mintPrice });
+
+    let locked = false;
+    try {
+      await token.connect(buyer).transfer(pair.address, tokensPerMint / 10n);
+    } catch {
+      locked = true;
+    }
+
+    expect(locked).to.equal(true);
+
+    await vault.connect(buyer).mint(1n, { value: params.mintPrice });
+    await token.connect(buyer).transfer(pair.address, tokensPerMint / 10n);
+
+    expect((await token.balanceOf(pair.address)) > 0n).to.equal(true);
   });
 
   it("rejects launch creation without the minimum deployment fee", async function () {
@@ -219,7 +340,10 @@ describe("AppleLaunchFactory", function () {
 
   it("routes sell tax to marketing, dividend, LP black hole, and burn", async function () {
     const { creator, buyer, pair, dividendReceiver, creationFee, factory } = await deployFactory();
-    const params = launchParams(creator.address);
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+    };
 
     await factory
       .connect(creator)
@@ -230,7 +354,7 @@ describe("AppleLaunchFactory", function () {
     const token = await ethers.getContractAt("AppleToken", tokenAddress);
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
 
-    await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
+    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
     await token.connect(creator).setDividendReceiver(dividendReceiver.address);
     await token.connect(creator).setAutomatedMarketMakerPair(pair.address, true);
 

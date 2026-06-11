@@ -14,6 +14,8 @@
 - `AppleToken`
   - ERC20 token with fixed total supply.
   - Stores project URI, template id, receiver, payment token, reward token, reward threshold, and tax configuration.
+  - Keeps normal user transfers locked until the mint vault finalizes the launch.
+  - Trading is enabled only by the project's `AppleMintVault` when the launch sells out.
   - Supports buy/sell tax against configured AMM pairs.
   - Routes tax by split:
     - Marketing goes to the project receiver.
@@ -27,16 +29,19 @@
 - `AppleMintVault`
   - Holds the full token supply allocated for public mint.
   - Handles native BNB minting and ERC20 payment-token minting.
-  - Sends mint payment directly to the project receiver.
+  - Escrows mint payment during the 24-hour launch window.
+  - Automatically finalizes the launch when `mintedCount == totalMints`.
+  - On finalization, enables token trading and pays escrowed mint funds to the project receiver.
+  - If the launch is not sold out after 24 hours, buyers can refund by returning their minted tokens to the vault.
   - Tracks `mintedCount`, whitelist minted count, public minted count, per-wallet minted amount, and progress.
   - Separates whitelist quota from public quota through `whitelistMintLimit` and `publicMintLimit`.
-  - Supports pause, receiver update, and whitelist controls.
+  - Supports receiver update and whitelist controls.
   - Ownership belongs to the project creator, not the receiver wallet.
 
 - `AppleAuditRegistry`
   - Separate on-chain registry for the auditor system.
   - Wallets call `applyAuditor(profileUri)` to submit an on-chain auditor application.
-  - Registry owner approves or suspends auditors through `setAuditorStatus(auditor, status)`.
+  - Registry owner approves auditors through `setAuditorStatus(auditor, AuditorStatus.Approved)`.
   - Approved auditors call `submitReview(projectToken, score, riskLevel, reportUri)` to publish project reviews.
   - Stores reviewer wallet, project token, score, risk level, report URI, and update time.
   - Supports reading all reviews for a project through `getProjectReviews(projectToken)`.
@@ -76,7 +81,21 @@ Only the vault owner can update whitelist allowances. The factory sets the vault
 - Factory creation fee: `0.005 BNB`.
 - Default fee recipient: `0x0D70FABE5B212f5BE5EFa503a2Dcc4D5C54B6347`.
 - The factory owner can update `creationFee` and `feeRecipient`.
-- Mint payments are separate from the factory fee and go to the project receiver.
+- Mint payments are separate from the factory fee.
+- Mint payments stay in the project's vault until the launch sells out.
+- If the launch sells out, the vault enables token trading and transfers escrowed mint payments to the project receiver.
+- If the launch is not sold out after 24 hours, buyers can call `claimRefund()` after approving the vault to take back their minted launch tokens.
+
+## Refund And Auto-Trading Policy
+
+- `refundDeadline` is set to `block.timestamp + 24 hours` when the vault is deployed.
+- `mint()` is available only before `refundDeadline` and only while the launch is not finalized.
+- When the final mint slot is filled, the vault calls `AppleToken.finalizeLaunch()` and sends escrowed payment to the receiver.
+- `AppleToken.finalizeLaunch()` can only be called by the assigned vault.
+- Before finalization, regular transfers between non-exempt addresses revert with `TradingLocked`.
+- After finalization, trading stays enabled; the auditor registry has no function that can pause or stop token trading.
+- `claimRefund()` is available only after `refundDeadline`, only if the launch is not finalized, and only for wallets with a paid mint balance.
+- Refund claims zero the wallet's mint/payment accounting, decrement active mint counters, transfer the minted launch tokens back to the vault, and return the user's BNB/ERC20 payment.
 
 ## Tax Split Policy
 
@@ -102,7 +121,8 @@ Common launchpads usually handle review credibility in one of three ways:
 This project uses the registry-contract approach:
 
 - Anyone can apply as an auditor by writing a profile URI on-chain.
-- Only the registry owner can approve or suspend auditors.
+- Only the registry owner can approve auditors.
+- The audit registry cannot pause trading and cannot control launch finalization.
 - Only approved auditors can submit project reviews.
 - Re-submitting a review for the same project updates the existing review instead of duplicating counts.
 - Report content can live on IPFS, GitHub, Notion, a website, or another public URI; the contract stores the URI.
@@ -111,7 +131,7 @@ Frontend integration:
 
 - Set `VITE_AUDIT_REGISTRY_ADDRESS` after deploying `AppleAuditRegistry`.
 - If the address is missing, the page shows a configuration warning instead of fake data.
-- If the connected wallet is the registry owner, the frontend shows approve/suspend controls.
+- If the connected wallet is the registry owner, the frontend shows auditor approval controls.
 - If the connected wallet is an approved auditor, the frontend enables project-review submission.
 
 The Swap page and Swap navigation were removed. There is no placeholder swap module in the UI.
@@ -127,6 +147,9 @@ The Swap page and Swap navigation were removed. There is no placeholder swap mod
 7. Token ownership goes to the project creator.
 8. Vault ownership belongs to the project creator.
 9. If whitelist mode is enabled, the project creator sets whitelist allowances before mint starts.
+10. Buyers mint from the vault during the 24-hour window.
+11. If sold out, the vault automatically enables trading and pays the receiver.
+12. If not sold out after 24 hours, buyers can approve the vault and call `claimRefund()`.
 
 The current UI only offers BNB and USDT for mint payments. USD1 was removed from the selectable payment-token list. Contracts still support any valid ERC20 payment token if called directly.
 
@@ -152,5 +175,9 @@ Current tests cover:
 - Public and whitelist mint quotas are tracked separately.
 - Only the creator-owned vault can update whitelist allowance.
 - Creator/template indexes and paged project reads are populated.
+- Launch mint payments are escrowed until sold out.
+- Sold-out launches automatically enable trading and pay the receiver.
+- Unsold launches allow buyers to refund after 24 hours by returning minted tokens.
+- Regular token transfers are locked before sellout and unlocked automatically after sellout.
 - Sell tax routes LP to the black hole, burns the burn split, and routes marketing/dividend splits correctly.
-- Auditor registry covers application, owner approval/suspension, approved-auditor-only review submission, review updates, and project review reads.
+- Auditor registry covers application, owner approval, approved-auditor-only review submission, review updates, and project review reads.

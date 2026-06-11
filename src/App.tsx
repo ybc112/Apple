@@ -30,6 +30,8 @@ import {
   templates,
 } from './data'
 import {
+  approveProjectRefundTokens,
+  claimProjectRefund,
   createLaunchToken,
   fetchLaunchProjects,
   isLaunchpadConfigured,
@@ -118,6 +120,12 @@ const copy = {
       confirmWhitelist: '请在钱包里确认白名单额度交易。',
       whitelistSubmitted: (hash: string) => `白名单交易已提交：${hash}，正在等待链上确认。`,
       whitelistConfirmed: '白名单额度已写入链上。',
+      confirmRefundApproval: '请先在钱包里授权 Vault 取回你的发射代币。',
+      refundApprovalSubmitted: (hash: string) => `退款授权已提交：${hash}，正在等待链上确认。`,
+      refundApprovalConfirmed: '退款授权已确认，继续提交退款交易。',
+      confirmRefund: '请在钱包里确认退款交易。退款会把你的代币退回 Vault，再退回付款。',
+      refundSubmitted: (hash: string) => `退款交易已提交：${hash}，正在等待链上确认。`,
+      refundConfirmed: '退款已完成。',
       confirmAuditorApply: '请在钱包里确认审核员申请交易。',
       auditorApplySubmitted: (hash: string) => `审核员申请已提交：${hash}，正在等待链上确认。`,
       auditorApplyConfirmed: '审核员申请已写入链上，等待管理员批准。',
@@ -165,6 +173,7 @@ const copy = {
       loading: '项目加载中',
       progress: '铸造进度',
       statusMinting: '铸造中',
+      statusTrading: '已开盘',
       statusCompleted: '已完成',
       statusWhitelist: '白名单',
       viewBscScan: '在 BscScan 查看',
@@ -179,6 +188,9 @@ const copy = {
       whitelistAllowance: '可 mint 次数',
       whitelistSubmit: '保存额度',
       whitelistPending: '等待确认',
+      refund: '申请退款',
+      refundAvailable: (amount: string) => `可退款 ${amount}`,
+      refundTip: '24 小时未打满后可退款',
     },
     launch: {
       network: '当前网络',
@@ -249,8 +261,8 @@ const copy = {
       registry: '审核 Registry',
       connect: '连接钱包',
       statusTitle: '我的审核员状态',
-      statusLabels: ['未申请', '待审核', '已批准', '已暂停'],
-      statusHelp: ['还没有提交链上申请。', '申请已上链，等待管理员批准。', '可以提交项目审核报告。', '账号已暂停，不能提交新审核。'],
+      statusLabels: ['未申请', '待审核', '已批准'],
+      statusHelp: ['还没有提交链上申请。', '申请已上链，等待管理员批准。', '可以提交项目审核报告。'],
       profileTitle: '申请成为审核员',
       profileDesc: '资料链接可以是 IPFS、官网、GitHub、Notion 或历史报告页。',
       profileUri: '资料链接 / Profile URI',
@@ -265,10 +277,9 @@ const copy = {
       submitReview: '提交链上审核',
       pending: '等待确认',
       adminTitle: '管理员审批',
-      adminDesc: '只有 Registry owner 钱包可以批准或暂停审核员。',
+      adminDesc: '只有 Registry owner 钱包可以批准审核员；审核员只负责提交报告，不控制开盘。',
       auditorWallet: '审核员钱包',
       approve: '批准',
-      suspend: '暂停',
       ownerOnly: '连接 Registry owner 钱包后可审批审核员。',
       recentTitle: '最近审核记录',
       emptyReviews: '暂无链上审核记录。',
@@ -308,6 +319,12 @@ const copy = {
       confirmWhitelist: 'Confirm the whitelist allowance transaction in your wallet.',
       whitelistSubmitted: (hash: string) => `Whitelist transaction submitted: ${hash}. Waiting for confirmation.`,
       whitelistConfirmed: 'Whitelist allowance is now recorded on-chain.',
+      confirmRefundApproval: 'First approve the Vault to take back your launch tokens.',
+      refundApprovalSubmitted: (hash: string) => `Refund approval submitted: ${hash}. Waiting for confirmation.`,
+      refundApprovalConfirmed: 'Refund approval confirmed. Continue with the refund transaction.',
+      confirmRefund: 'Confirm the refund transaction. Your tokens will be returned to the Vault before payment is refunded.',
+      refundSubmitted: (hash: string) => `Refund transaction submitted: ${hash}. Waiting for confirmation.`,
+      refundConfirmed: 'Refund complete.',
       confirmAuditorApply: 'Confirm the auditor application transaction in your wallet.',
       auditorApplySubmitted: (hash: string) => `Auditor application submitted: ${hash}. Waiting for confirmation.`,
       auditorApplyConfirmed: 'Auditor application is recorded on-chain and waiting for admin approval.',
@@ -355,6 +372,7 @@ const copy = {
       loading: 'Loading projects',
       progress: 'Mint progress',
       statusMinting: 'Minting',
+      statusTrading: 'Trading',
       statusCompleted: 'Completed',
       statusWhitelist: 'Whitelist',
       viewBscScan: 'View on BscScan',
@@ -369,6 +387,9 @@ const copy = {
       whitelistAllowance: 'Mint allowance',
       whitelistSubmit: 'Save allowance',
       whitelistPending: 'Waiting',
+      refund: 'Claim refund',
+      refundAvailable: (amount: string) => `Refundable ${amount}`,
+      refundTip: 'Refunds open if not sold out after 24h',
     },
     launch: {
       network: 'Current network',
@@ -439,8 +460,8 @@ const copy = {
       registry: 'Audit Registry',
       connect: 'Connect wallet',
       statusTitle: 'My auditor status',
-      statusLabels: ['Not applied', 'Applied', 'Approved', 'Suspended'],
-      statusHelp: ['No on-chain application yet.', 'Application is on-chain and waiting for approval.', 'You can submit project reviews.', 'This account is suspended.'],
+      statusLabels: ['Not applied', 'Applied', 'Approved'],
+      statusHelp: ['No on-chain application yet.', 'Application is on-chain and waiting for approval.', 'You can submit project reviews.'],
       profileTitle: 'Apply as auditor',
       profileDesc: 'Profile can be an IPFS URI, website, GitHub, Notion, or prior report page.',
       profileUri: 'Profile link / URI',
@@ -455,10 +476,9 @@ const copy = {
       submitReview: 'Submit on-chain review',
       pending: 'Waiting',
       adminTitle: 'Admin approval',
-      adminDesc: 'Only the Registry owner wallet can approve or suspend auditors.',
+      adminDesc: 'Only the Registry owner wallet can approve auditors. Auditors only submit reports and do not control launch finalization.',
       auditorWallet: 'Auditor wallet',
       approve: 'Approve',
-      suspend: 'Suspend',
       ownerOnly: 'Connect the Registry owner wallet to approve auditors.',
       recentTitle: 'Recent reviews',
       emptyReviews: 'No on-chain reviews yet.',
@@ -617,7 +637,7 @@ function App() {
     setProjectsStatus('loading')
     setProjectsError('')
 
-    fetchLaunchProjects()
+    fetchLaunchProjects(wallet.account)
       .then((items) => {
         if (!active) {
           return
@@ -639,7 +659,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [projectsRefreshKey])
+  }, [projectsRefreshKey, wallet.account])
 
   useEffect(() => {
     let active = true
@@ -937,6 +957,54 @@ function App() {
     }
   }
 
+  const submitProjectRefund = async (project: LaunchProject) => {
+    const provider = getProvider()
+    if (!provider) {
+      setNotice({ kind: 'error', message: text.wallet.noProviderForTx })
+      return
+    }
+
+    try {
+      if (wallet.account && !onTargetNetwork) {
+        await switchNetwork()
+      }
+
+      if (!wallet.account) {
+        const accounts = await requestAccounts(provider)
+        const chainId = await getChainId(provider)
+        setWallet({
+          account: accounts[0] ?? '',
+          chainId,
+          status: accounts[0] ? 'connected' : 'idle',
+          error: accounts[0] ? '' : text.wallet.noAccount,
+        })
+      }
+
+      if (project.refundNeedsApproval) {
+        setNotice({ kind: 'info', message: text.notice.confirmRefundApproval })
+        const approval = await approveProjectRefundTokens(
+          provider,
+          project.token,
+          project.vault,
+          project.refundTokenAmount,
+          language,
+        )
+        setNotice({ kind: 'info', message: text.notice.refundApprovalSubmitted(shortHash(approval.hash)) })
+        await waitForTransactionReceipt(provider, approval.hash, 120_000, language)
+        setNotice({ kind: 'info', message: text.notice.refundApprovalConfirmed })
+      }
+
+      setNotice({ kind: 'info', message: text.notice.confirmRefund })
+      const result = await claimProjectRefund(provider, project.vault, language)
+      setNotice({ kind: 'info', message: text.notice.refundSubmitted(shortHash(result.hash)) })
+      await waitForTransactionReceipt(provider, result.hash, 120_000, language)
+      setNotice({ kind: 'success', message: text.notice.refundConfirmed })
+      setProjectsRefreshKey((current) => current + 1)
+    } catch (error) {
+      setNotice({ kind: 'error', message: readProviderErrorMessage(error) })
+    }
+  }
+
   const prepareWalletTransaction = async () => {
     const provider = getProvider()
     if (!provider) {
@@ -1065,6 +1133,7 @@ function App() {
           projectsError={projectsError}
           projectsStatus={projectsStatus}
           setProjectQuery={setProjectQuery}
+          submitProjectRefund={submitProjectRefund}
           submitWhitelistAllowance={submitWhitelistAllowance}
           text={text}
           wallet={wallet}
@@ -1230,6 +1299,7 @@ function HomePage({
   projectsError,
   projectsStatus,
   setProjectQuery,
+  submitProjectRefund,
   submitWhitelistAllowance,
   text,
   wallet,
@@ -1241,6 +1311,7 @@ function HomePage({
   projectsError: string
   projectsStatus: ProjectsStatus
   setProjectQuery: (value: string) => void
+  submitProjectRefund: (project: LaunchProject) => Promise<void>
   submitWhitelistAllowance: (project: LaunchProject, account: string, allowance: string) => Promise<void>
   text: (typeof copy)[Language]
   wallet: WalletState
@@ -1395,6 +1466,7 @@ function HomePage({
                 key={project.token}
                 language={language}
                 project={project}
+                submitProjectRefund={submitProjectRefund}
                 submitWhitelistAllowance={submitWhitelistAllowance}
                 text={text}
                 wallet={wallet}
@@ -1455,12 +1527,14 @@ function ProjectEmptyState({
 function ProjectCard({
   language,
   project,
+  submitProjectRefund,
   submitWhitelistAllowance,
   text,
   wallet,
 }: {
   language: Language
   project: LaunchProject
+  submitProjectRefund: (project: LaunchProject) => Promise<void>
   submitWhitelistAllowance: (project: LaunchProject, account: string, allowance: string) => Promise<void>
   text: (typeof copy)[Language]
   wallet: WalletState
@@ -1469,8 +1543,13 @@ function ProjectCard({
   const [whitelistAccount, setWhitelistAccount] = useState('')
   const [whitelistAllowance, setWhitelistAllowance] = useState('1')
   const [whitelistSaving, setWhitelistSaving] = useState(false)
+  const [refundPending, setRefundPending] = useState(false)
   const progress = Math.min(100, Math.max(0, project.progress))
-  const status = progress >= 100 ? text.projects.statusCompleted : project.whitelistEnabled ? text.projects.statusWhitelist : text.projects.statusMinting
+  const status = project.finalized
+    ? text.projects.statusTrading
+    : progress >= 100
+      ? text.projects.statusCompleted
+      : project.whitelistEnabled ? text.projects.statusWhitelist : text.projects.statusMinting
   const explorerUrl = `${BNB_CHAIN.blockExplorerUrls[0]}/address/${project.token}`
   const canManageWhitelist =
     Boolean(wallet.account) && wallet.account.toLowerCase() === project.creator.toLowerCase()
@@ -1535,6 +1614,11 @@ function ProjectCard({
           project.publicMintCount,
         )}
       </div>
+      <div className={project.canRefund ? 'refund-state available' : 'refund-state'}>
+        {project.canRefund && project.userRefundAmount
+          ? text.projects.refundAvailable(project.userRefundAmount)
+          : text.projects.refundTip}
+      </div>
       <div className="project-links">
         {project.website && (
           <a href={project.website} target="_blank" rel="noreferrer" title={text.projects.website}>
@@ -1556,6 +1640,23 @@ function ProjectCard({
         <ExternalLink size={16} />
         {text.projects.viewBscScan}
       </button>
+      {project.canRefund && (
+        <button
+          type="button"
+          disabled={refundPending}
+          onClick={async () => {
+            setRefundPending(true)
+            try {
+              await submitProjectRefund(project)
+            } finally {
+              setRefundPending(false)
+            }
+          }}
+        >
+          <Wallet size={16} />
+          {refundPending ? text.projects.whitelistPending : text.projects.refund}
+        </button>
+      )}
       {canManageWhitelist && (
         <form
           className="whitelist-manager"
@@ -2254,27 +2355,10 @@ function AuditorsPage({
             </div>
           </div>
           <InputField label={text.auditors.auditorWallet} value={auditorWallet} onChange={setAuditorWallet} />
-          <div className="auditor-actions">
-            <button className="submit-button" type="submit" disabled={!isOwner || pendingAction === 'approve'}>
-              <UserPlus size={18} />
-              {pendingAction === 'approve' ? text.auditors.pending : text.auditors.approve}
-            </button>
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={!isOwner || pendingAction === 'suspend'}
-              onClick={async () => {
-                setPendingAction('suspend')
-                try {
-                  await submitAuditorStatus(auditorWallet, 3)
-                } finally {
-                  setPendingAction('')
-                }
-              }}
-            >
-              {pendingAction === 'suspend' ? text.auditors.pending : text.auditors.suspend}
-            </button>
-          </div>
+          <button className="submit-button" type="submit" disabled={!isOwner || pendingAction === 'approve'}>
+            <UserPlus size={18} />
+            {pendingAction === 'approve' ? text.auditors.pending : text.auditors.approve}
+          </button>
         </form>
       </section>
 

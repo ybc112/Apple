@@ -6,10 +6,16 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+interface ILaunchToken is IERC20 {
+    function finalizeLaunch() external;
+}
+
 contract AppleMintVault is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    IERC20 public immutable token;
+    uint256 public constant REFUND_WINDOW = 24 hours;
+
+    ILaunchToken public immutable token;
     address public immutable paymentToken;
     address public receiver;
     uint256 public immutable totalMints;
@@ -20,18 +26,25 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     uint256 public mintedCount;
     uint256 public whitelistMintedCount;
     uint256 public publicMintedCount;
-    bool public paused;
+    uint256 public refundedCount;
+    uint256 public refundedPayment;
+    uint256 public immutable refundDeadline;
+    bool public finalized;
     bool public whitelistEnabled;
 
     mapping(address account => uint256 allowance) public whitelistAllowance;
     mapping(address account => uint256 minted) public whitelistMintedByWallet;
     mapping(address account => uint256 mintedByWallet) public mintedByWallet;
+    mapping(address account => uint256 paid) public paidByWallet;
 
     error InvalidQuantity();
     error MintSoldOut();
     error IncorrectPayment();
+    error LaunchExpired();
+    error LaunchAlreadyFinalized();
+    error NoRefund();
+    error RefundUnavailable();
     error ZeroAddress();
-    error Paused();
     error NotWhitelisted();
     error LengthMismatch();
 
@@ -44,7 +57,8 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         uint256 paid
     );
     event ReceiverUpdated(address indexed receiver);
-    event PausedUpdated(bool paused);
+    event LaunchFinalized(uint256 paidOut);
+    event Refunded(address indexed account, uint256 quantity, uint256 tokenAmount, uint256 paid);
     event WhitelistEnabledUpdated(bool enabled);
     event WhitelistAllowanceUpdated(address indexed account, uint256 allowance);
 
@@ -73,7 +87,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
             revert InvalidQuantity();
         }
 
-        token = IERC20(token_);
+        token = ILaunchToken(token_);
         paymentToken = paymentToken_;
         receiver = receiver_;
         totalMints = totalMints_;
@@ -81,12 +95,16 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         publicMintLimit = totalMints_ - whitelistMintLimit_;
         mintPrice = mintPrice_;
         tokensPerMint = perMint;
+        refundDeadline = block.timestamp + REFUND_WINDOW;
         whitelistEnabled = whitelistEnabled_;
     }
 
     function mint(uint256 quantity) external payable nonReentrant {
-        if (paused) {
-            revert Paused();
+        if (finalized) {
+            revert LaunchAlreadyFinalized();
+        }
+        if (block.timestamp >= refundDeadline) {
+            revert LaunchExpired();
         }
         if (quantity == 0) {
             revert InvalidQuantity();
@@ -107,20 +125,20 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
             if (msg.value != cost) {
                 revert IncorrectPayment();
             }
-
-            (bool sent,) = payable(receiver).call{ value: msg.value }("");
-            if (!sent) {
-                revert IncorrectPayment();
-            }
         } else {
             if (msg.value != 0) {
                 revert IncorrectPayment();
             }
-            IERC20(paymentToken).safeTransferFrom(msg.sender, receiver, cost);
+            IERC20(paymentToken).safeTransferFrom(msg.sender, address(this), cost);
         }
 
-        token.safeTransfer(msg.sender, tokenAmount);
+        paidByWallet[msg.sender] += cost;
+        IERC20(address(token)).safeTransfer(msg.sender, tokenAmount);
         emit Minted(msg.sender, quantity, whitelistQuantity, publicQuantity, tokenAmount, cost);
+
+        if (mintedCount == totalMints) {
+            _finalizeLaunch();
+        }
     }
 
     function quote(uint256 quantity) public view returns (uint256) {
@@ -131,9 +149,56 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         return (mintedCount * 10_000) / totalMints;
     }
 
-    function setPaused(bool nextPaused) external onlyOwner {
-        paused = nextPaused;
-        emit PausedUpdated(nextPaused);
+    function canRefund(address account) external view returns (bool) {
+        return !finalized && block.timestamp >= refundDeadline && paidByWallet[account] > 0;
+    }
+
+    function claimRefund() external nonReentrant {
+        if (finalized) {
+            revert LaunchAlreadyFinalized();
+        }
+        if (block.timestamp < refundDeadline || mintedCount == totalMints) {
+            revert RefundUnavailable();
+        }
+
+        uint256 paid = paidByWallet[msg.sender];
+        uint256 quantity = mintedByWallet[msg.sender];
+        if (paid == 0 || quantity == 0) {
+            revert NoRefund();
+        }
+
+        uint256 tokenAmount = tokensPerMint * quantity;
+        uint256 whitelistQuantity = whitelistMintedByWallet[msg.sender];
+        if (whitelistQuantity > quantity) {
+            whitelistQuantity = quantity;
+        }
+        uint256 publicQuantity = quantity - whitelistQuantity;
+
+        paidByWallet[msg.sender] = 0;
+        mintedByWallet[msg.sender] = 0;
+        whitelistMintedByWallet[msg.sender] = 0;
+        mintedCount -= quantity;
+        if (whitelistQuantity > 0) {
+            whitelistMintedCount -= whitelistQuantity;
+        }
+        if (publicQuantity > 0) {
+            publicMintedCount -= publicQuantity;
+        }
+        refundedCount += quantity;
+        refundedPayment += paid;
+
+        IERC20(address(token)).safeTransferFrom(msg.sender, address(this), tokenAmount);
+
+        if (paymentToken == address(0)) {
+            (bool sent,) = payable(msg.sender).call{ value: paid }("");
+            if (!sent) {
+                revert IncorrectPayment();
+            }
+        } else {
+            IERC20(paymentToken).safeTransfer(msg.sender, paid);
+        }
+
+        emit Refunded(msg.sender, quantity, tokenAmount, paid);
     }
 
     function setWhitelistEnabled(bool nextWhitelistEnabled) external onlyOwner {
@@ -196,6 +261,10 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     }
 
     function withdrawNative(uint256 amount) external onlyOwner {
+        if (!finalized) {
+            revert RefundUnavailable();
+        }
+
         (bool sent,) = payable(receiver).call{ value: amount }("");
         if (!sent) {
             revert IncorrectPayment();
@@ -203,6 +272,9 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     }
 
     function withdrawPaymentToken(uint256 amount) external onlyOwner {
+        if (!finalized) {
+            revert RefundUnavailable();
+        }
         if (paymentToken == address(0)) {
             revert ZeroAddress();
         }
@@ -249,6 +321,29 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
 
     function _min(uint256 left, uint256 right) private pure returns (uint256) {
         return left < right ? left : right;
+    }
+
+    function _finalizeLaunch() private {
+        finalized = true;
+        token.finalizeLaunch();
+
+        uint256 paidOut;
+        if (paymentToken == address(0)) {
+            paidOut = address(this).balance;
+            if (paidOut > 0) {
+                (bool sent,) = payable(receiver).call{ value: paidOut }("");
+                if (!sent) {
+                    revert IncorrectPayment();
+                }
+            }
+        } else {
+            paidOut = IERC20(paymentToken).balanceOf(address(this));
+            if (paidOut > 0) {
+                IERC20(paymentToken).safeTransfer(receiver, paidOut);
+            }
+        }
+
+        emit LaunchFinalized(paidOut);
     }
 
     receive() external payable {}

@@ -4,7 +4,7 @@ import type { EthereumProvider } from '../wallet'
 import { launchpadConfig } from './launchpad'
 
 export type AuditLocale = 'zh' | 'en'
-export type AuditorStatus = 0 | 1 | 2 | 3
+export type AuditorStatus = 0 | 1 | 2
 export type RiskLevel = 0 | 1 | 2 | 3
 
 export type AuditorProfile = {

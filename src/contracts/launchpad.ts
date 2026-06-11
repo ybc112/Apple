@@ -49,6 +49,7 @@ const legacyLaunchFactoryAbi = [
 const tokenAbi = [
   'function name() view returns (string)',
   'function symbol() view returns (string)',
+  'function allowance(address owner,address spender) view returns (uint256)',
 ] as const
 
 const mintVaultAbi = [
@@ -58,10 +59,20 @@ const mintVaultAbi = [
   'function publicMintLimit() view returns (uint256)',
   'function whitelistMintedCount() view returns (uint256)',
   'function publicMintedCount() view returns (uint256)',
+  'function refundDeadline() view returns (uint256)',
+  'function finalized() view returns (bool)',
+  'function tokensPerMint() view returns (uint256)',
+  'function mintedByWallet(address account) view returns (uint256)',
+  'function paidByWallet(address account) view returns (uint256)',
 ] as const
 
 const mintVaultWriteAbi = [
   'function setWhitelistAllowance(address account,uint256 allowance)',
+  'function claimRefund()',
+] as const
+
+const tokenWriteAbi = [
+  'function approve(address spender,uint256 amount) returns (bool)',
 ] as const
 
 export type LaunchTransactionResult = {
@@ -125,6 +136,8 @@ const messages = {
     receiver: '接收钱包',
     invalidWhitelistAccount: '请填写有效的白名单钱包。',
     invalidWhitelistAllowance: '白名单额度必须是大于 0 的整数。',
+    invalidVault: 'Vault 地址无效。',
+    invalidRefundAmount: '退款代币数量无效。',
   },
   en: {
     factoryMissing: 'Launch Factory is not configured. Deploy the Factory and set VITE_LAUNCHPAD_FACTORY_ADDRESS first.',
@@ -148,6 +161,8 @@ const messages = {
     receiver: 'Receiver wallet',
     invalidWhitelistAccount: 'Please enter a valid whitelist wallet.',
     invalidWhitelistAllowance: 'Whitelist allowance must be an integer greater than 0.',
+    invalidVault: 'Vault address is invalid.',
+    invalidRefundAmount: 'Refund token amount is invalid.',
   },
 } as const
 
@@ -269,7 +284,93 @@ export async function setProjectWhitelistAllowance(
   return { hash }
 }
 
-export async function fetchLaunchProjects(): Promise<LaunchProject[]> {
+export async function claimProjectRefund(
+  provider: EthereumProvider,
+  vaultAddress: string,
+  locale: LaunchpadLocale = 'zh',
+): Promise<LaunchTransactionResult> {
+  const text = messages[locale]
+
+  if (!isAddress(vaultAddress)) {
+    throw new Error(text.invalidVault)
+  }
+
+  const chainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
+  if (Number.parseInt(chainId, 16) !== launchpadConfig.chainId) {
+    throw new Error(text.wrongNetwork)
+  }
+
+  const accounts = (await provider.request({ method: 'eth_accounts' })) as string[]
+  const from = accounts[0]
+  if (!from || !isAddress(from)) {
+    throw new Error(text.connectWallet)
+  }
+
+  const iface = new Interface(mintVaultWriteAbi)
+  const data = iface.encodeFunctionData('claimRefund', [])
+  const hash = (await provider.request({
+    method: 'eth_sendTransaction',
+    params: [
+      {
+        from,
+        to: vaultAddress,
+        data,
+      },
+    ],
+  })) as string
+
+  return { hash }
+}
+
+export async function approveProjectRefundTokens(
+  provider: EthereumProvider,
+  tokenAddress: string,
+  vaultAddress: string,
+  tokenAmount: string,
+  locale: LaunchpadLocale = 'zh',
+): Promise<LaunchTransactionResult> {
+  const text = messages[locale]
+
+  if (!isAddress(tokenAddress)) {
+    throw new Error(text.invalidAddress('Token'))
+  }
+  if (!isAddress(vaultAddress)) {
+    throw new Error(text.invalidVault)
+  }
+
+  const amount = BigInt(tokenAmount || '0')
+  if (amount <= 0n) {
+    throw new Error(text.invalidRefundAmount)
+  }
+
+  const chainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
+  if (Number.parseInt(chainId, 16) !== launchpadConfig.chainId) {
+    throw new Error(text.wrongNetwork)
+  }
+
+  const accounts = (await provider.request({ method: 'eth_accounts' })) as string[]
+  const from = accounts[0]
+  if (!from || !isAddress(from)) {
+    throw new Error(text.connectWallet)
+  }
+
+  const iface = new Interface(tokenWriteAbi)
+  const data = iface.encodeFunctionData('approve', [vaultAddress, amount])
+  const hash = (await provider.request({
+    method: 'eth_sendTransaction',
+    params: [
+      {
+        from,
+        to: tokenAddress,
+        data,
+      },
+    ],
+  })) as string
+
+  return { hash }
+}
+
+export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]> {
   if (!isLaunchpadConfigured) {
     return []
   }
@@ -301,7 +402,21 @@ export async function fetchLaunchProjects(): Promise<LaunchProject[]> {
     const token = new Contract(tokenAddress, tokenAbi, provider)
     const vault = new Contract(vaultAddress, mintVaultAbi, provider)
 
-    const [name, symbol, mintedCount, whitelistMintedCount, publicMintedCount, vaultWhitelistLimit, vaultPublicLimit] = await Promise.all([
+    const [
+      name,
+      symbol,
+      mintedCount,
+      whitelistMintedCount,
+      publicMintedCount,
+      vaultWhitelistLimit,
+      vaultPublicLimit,
+      refundDeadline,
+      finalized,
+      tokensPerMint,
+      userMintedCount,
+      userPaid,
+      refundAllowance,
+    ] = await Promise.all([
       token.name().catch(() => 'Unknown'),
       token.symbol().catch(() => 'TOKEN'),
       vault.mintedCount().catch(() => 0n),
@@ -309,9 +424,23 @@ export async function fetchLaunchProjects(): Promise<LaunchProject[]> {
       vault.publicMintedCount().catch(() => 0n),
       vault.whitelistMintLimit().catch(() => whitelistMintCount),
       vault.publicMintLimit().catch(() => publicMintCount),
+      vault.refundDeadline().catch(() => 0n),
+      vault.finalized().catch(() => false),
+      vault.tokensPerMint().catch(() => (mintCount > 0n ? totalSupply / mintCount : 0n)),
+      account && isAddress(account) ? vault.mintedByWallet(account).catch(() => 0n) : 0n,
+      account && isAddress(account) ? vault.paidByWallet(account).catch(() => 0n) : 0n,
+      account && isAddress(account) ? token.allowance(account, vaultAddress).catch(() => 0n) : 0n,
     ])
 
     const mintedCountValue = BigInt(mintedCount)
+    const userMintedCountValue = BigInt(userMintedCount)
+    const refundTokenAmount = BigInt(tokensPerMint) * userMintedCountValue
+    const canRefund =
+      !Boolean(finalized) &&
+      Number(refundDeadline) > 0 &&
+      Date.now() >= Number(refundDeadline) * 1000 &&
+      BigInt(userPaid) > 0n &&
+      refundTokenAmount > 0n
     const progress =
       mintCount > 0n ? Math.min(100, Number((mintedCountValue * 10_000n) / mintCount) / 100) : 0
     const metadata = parseMetadata(metadataUri)
@@ -336,6 +465,13 @@ export async function fetchLaunchProjects(): Promise<LaunchProject[]> {
       mintedCount: mintedCountValue.toString(),
       whitelistMintedCount: BigInt(whitelistMintedCount).toString(),
       publicMintedCount: BigInt(publicMintedCount).toString(),
+      refundDeadline: Number(refundDeadline),
+      finalized: Boolean(finalized),
+      userMintedCount: userMintedCountValue.toString(),
+      refundTokenAmount: refundTokenAmount.toString(),
+      refundNeedsApproval: canRefund && BigInt(refundAllowance) < refundTokenAmount,
+      userRefundAmount: formatRefundAmount(BigInt(userPaid), paymentToken),
+      canRefund,
       progress,
       whitelistEnabled,
       createdAt,
@@ -489,6 +625,14 @@ function parseMetadata(metadataUri: string): ProjectMetadata {
 }
 
 function formatMintPrice(value: bigint, paymentToken: string) {
+  return paymentToken.toLowerCase() === ZeroAddress ? `${formatEther(value)} BNB` : formatUnits(value, 18)
+}
+
+function formatRefundAmount(value: bigint, paymentToken: string) {
+  if (value <= 0n) {
+    return ''
+  }
+
   return paymentToken.toLowerCase() === ZeroAddress ? `${formatEther(value)} BNB` : formatUnits(value, 18)
 }
 
