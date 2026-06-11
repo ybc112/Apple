@@ -32,11 +32,13 @@ import {
 } from './data'
 import {
   approveProjectRefundTokens,
+  approveProjectMintPayment,
   claimProjectRefund,
   createLaunchToken,
   fetchLaunchProjects,
   isLaunchpadConfigured,
   launchpadConfig,
+  mintLaunchProject,
   setProjectWhitelistAllowance,
   waitForTransactionReceipt,
 } from './contracts/launchpad'
@@ -132,6 +134,12 @@ const copy = {
       confirmWhitelist: '请在钱包里确认白名单额度交易。',
       whitelistSubmitted: (hash: string) => `白名单交易已提交：${hash}，正在等待链上确认。`,
       whitelistConfirmed: '白名单额度已写入链上。',
+      confirmMintApproval: '请先在钱包里授权付款代币给 Vault。',
+      mintApprovalSubmitted: (hash: string) => `Mint 授权已提交：${hash}，正在等待链上确认。`,
+      mintApprovalConfirmed: 'Mint 授权已确认，继续提交 mint 交易。',
+      confirmMint: '请在钱包里确认 mint 交易。',
+      mintSubmitted: (hash: string) => `Mint 交易已提交：${hash}，正在等待链上确认。`,
+      mintConfirmed: 'Mint 已完成，项目进度已刷新。',
       confirmRefundApproval: '请先在钱包里授权 Vault 取回你的发射代币。',
       refundApprovalSubmitted: (hash: string) => `退款授权已提交：${hash}，正在等待链上确认。`,
       refundApprovalConfirmed: '退款授权已确认，继续提交退款交易。',
@@ -208,6 +216,12 @@ const copy = {
       whitelistAllowance: '可 mint 次数',
       whitelistSubmit: '保存额度',
       whitelistPending: '等待确认',
+      mint: 'Mint',
+      mintQuantity: 'Mint 数量',
+      mintCost: (amount: string) => `合计 ${amount}`,
+      approveMint: '授权付款',
+      whitelistRemaining: (amount: string) => `白名单可用 ${amount}`,
+      mintClosed: '已结束',
       refund: '申请退款',
       refundAvailable: (amount: string) => `可退款 ${amount}`,
       refundTip: '24 小时未打满后可退款',
@@ -406,6 +420,12 @@ const copy = {
       confirmWhitelist: 'Confirm the whitelist allowance transaction in your wallet.',
       whitelistSubmitted: (hash: string) => `Whitelist transaction submitted: ${hash}. Waiting for confirmation.`,
       whitelistConfirmed: 'Whitelist allowance is now recorded on-chain.',
+      confirmMintApproval: 'Approve the payment token for the Vault first.',
+      mintApprovalSubmitted: (hash: string) => `Mint approval submitted: ${hash}. Waiting for confirmation.`,
+      mintApprovalConfirmed: 'Mint approval confirmed. Continue with the mint transaction.',
+      confirmMint: 'Confirm the mint transaction in your wallet.',
+      mintSubmitted: (hash: string) => `Mint transaction submitted: ${hash}. Waiting for confirmation.`,
+      mintConfirmed: 'Mint complete. Project progress refreshed.',
       confirmRefundApproval: 'First approve the Vault to take back your launch tokens.',
       refundApprovalSubmitted: (hash: string) => `Refund approval submitted: ${hash}. Waiting for confirmation.`,
       refundApprovalConfirmed: 'Refund approval confirmed. Continue with the refund transaction.',
@@ -482,6 +502,12 @@ const copy = {
       whitelistAllowance: 'Mint allowance',
       whitelistSubmit: 'Save allowance',
       whitelistPending: 'Waiting',
+      mint: 'Mint',
+      mintQuantity: 'Mint quantity',
+      mintCost: (amount: string) => `Total ${amount}`,
+      approveMint: 'Approve payment',
+      whitelistRemaining: (amount: string) => `Whitelist left ${amount}`,
+      mintClosed: 'Closed',
       refund: 'Claim refund',
       refundAvailable: (amount: string) => `Refundable ${amount}`,
       refundTip: 'Refunds open if not sold out after 24h',
@@ -1118,6 +1144,43 @@ function App() {
     }
   }
 
+  const submitProjectMint = async (project: LaunchProject, quantity: string) => {
+    try {
+      const provider = await prepareWalletTransaction()
+      if (!provider) {
+        return
+      }
+
+      const cost = getMintCostWei(project, quantity)
+
+      if (
+        project.paymentToken.toLowerCase() !== '0x0000000000000000000000000000000000000000' &&
+        BigInt(project.mintPaymentAllowance || '0') < cost
+      ) {
+        setNotice({ kind: 'info', message: text.notice.confirmMintApproval })
+        const approval = await approveProjectMintPayment(
+          provider,
+          project.paymentToken,
+          project.vault,
+          cost.toString(),
+          language,
+        )
+        setNotice({ kind: 'info', message: text.notice.mintApprovalSubmitted(shortHash(approval.hash)) })
+        await waitForTransactionReceipt(provider, approval.hash, 120_000, language)
+        setNotice({ kind: 'info', message: text.notice.mintApprovalConfirmed })
+      }
+
+      setNotice({ kind: 'info', message: text.notice.confirmMint })
+      const result = await mintLaunchProject(provider, project, quantity, language)
+      setNotice({ kind: 'info', message: text.notice.mintSubmitted(shortHash(result.hash)) })
+      await waitForTransactionReceipt(provider, result.hash, 120_000, language)
+      setNotice({ kind: 'success', message: text.notice.mintConfirmed })
+      setProjectsRefreshKey((current) => current + 1)
+    } catch (error) {
+      setNotice({ kind: 'error', message: readProviderErrorMessage(error) })
+    }
+  }
+
   const submitProjectRefund = async (project: LaunchProject) => {
     const provider = getProvider()
     if (!provider) {
@@ -1344,6 +1407,7 @@ function App() {
           projectsError={projectsError}
           projectsStatus={projectsStatus}
           setProjectQuery={setProjectQuery}
+          submitProjectMint={submitProjectMint}
           submitProjectRefund={submitProjectRefund}
           submitWhitelistAllowance={submitWhitelistAllowance}
           text={text}
@@ -1543,6 +1607,7 @@ function HomePage({
   projectsError,
   projectsStatus,
   setProjectQuery,
+  submitProjectMint,
   submitProjectRefund,
   submitWhitelistAllowance,
   text,
@@ -1557,6 +1622,7 @@ function HomePage({
   projectsError: string
   projectsStatus: ProjectsStatus
   setProjectQuery: (value: string) => void
+  submitProjectMint: (project: LaunchProject, quantity: string) => Promise<void>
   submitProjectRefund: (project: LaunchProject) => Promise<void>
   submitWhitelistAllowance: (project: LaunchProject, account: string, allowance: string) => Promise<void>
   text: (typeof copy)[Language]
@@ -1714,6 +1780,7 @@ function HomePage({
                 openProjectDetail={openProjectDetail}
                 openSwap={openSwap}
                 project={project}
+                submitProjectMint={submitProjectMint}
                 submitProjectRefund={submitProjectRefund}
                 submitWhitelistAllowance={submitWhitelistAllowance}
                 text={text}
@@ -1777,6 +1844,7 @@ function ProjectCard({
   openProjectDetail,
   openSwap,
   project,
+  submitProjectMint,
   submitProjectRefund,
   submitWhitelistAllowance,
   text,
@@ -1786,17 +1854,26 @@ function ProjectCard({
   openProjectDetail: (tokenAddress: string) => void
   openSwap: (tokenAddress?: string) => void
   project: LaunchProject
+  submitProjectMint: (project: LaunchProject, quantity: string) => Promise<void>
   submitProjectRefund: (project: LaunchProject) => Promise<void>
   submitWhitelistAllowance: (project: LaunchProject, account: string, allowance: string) => Promise<void>
   text: (typeof copy)[Language]
   wallet: WalletState
 }) {
   const [copied, setCopied] = useState(false)
+  const [mintQuantity, setMintQuantity] = useState('1')
+  const [mintPending, setMintPending] = useState(false)
   const [whitelistAccount, setWhitelistAccount] = useState('')
   const [whitelistAllowance, setWhitelistAllowance] = useState('1')
   const [whitelistSaving, setWhitelistSaving] = useState(false)
   const [refundPending, setRefundPending] = useState(false)
   const progress = Math.min(100, Math.max(0, project.progress))
+  const mintExpired = project.refundDeadline > 0 && Date.now() >= project.refundDeadline * 1000
+  const mintOpen = !project.finalized && progress < 100 && !mintExpired
+  const mintCostWei = getMintCostWei(project, mintQuantity)
+  const mintNeedsApproval =
+    project.paymentToken.toLowerCase() !== '0x0000000000000000000000000000000000000000' &&
+    BigInt(project.mintPaymentAllowance || '0') < mintCostWei
   const status = project.finalized
     ? text.projects.statusTrading
     : progress >= 100
@@ -1873,6 +1950,48 @@ function ProjectCard({
           ? text.projects.refundAvailable(project.userRefundAmount)
           : text.projects.refundTip}
       </div>
+      {!project.finalized && progress < 100 && (
+        <form
+          className="mint-panel"
+          onSubmit={async (event) => {
+            event.preventDefault()
+            if (!mintOpen || mintPending) {
+              return
+            }
+            setMintPending(true)
+            try {
+              await submitProjectMint(project, mintQuantity)
+            } finally {
+              setMintPending(false)
+            }
+          }}
+        >
+          <div>
+            <label>
+              <span>{text.projects.mintQuantity}</span>
+              <input
+                inputMode="numeric"
+                min="1"
+                type="number"
+                value={mintQuantity}
+                onChange={(event) => setMintQuantity(normalizeMintInput(event.target.value))}
+              />
+            </label>
+            <strong>{text.projects.mintCost(formatMintCost(project, mintQuantity))}</strong>
+          </div>
+          {project.whitelistEnabled && wallet.account && (
+            <em>{text.projects.whitelistRemaining(project.whitelistRemaining)}</em>
+          )}
+          <button className="submit-button" type="submit" disabled={!mintOpen || mintPending}>
+            <Rocket size={16} />
+            {mintPending
+              ? text.projects.whitelistPending
+              : mintOpen
+                ? mintNeedsApproval ? text.projects.approveMint : text.projects.mint
+                : text.projects.mintClosed}
+          </button>
+        </form>
+      )}
       <div className="project-links">
         {project.website && (
           <a href={project.website} target="_blank" rel="noreferrer" title={text.projects.website}>
@@ -1890,37 +2009,39 @@ function ProjectCard({
           </a>
         )}
       </div>
-      <button type="button" onClick={() => window.open(explorerUrl, '_blank', 'noreferrer')}>
-        <ExternalLink size={16} />
-        {text.projects.viewBscScan}
-      </button>
-      <button type="button" onClick={() => openProjectDetail(project.token)}>
-        <FileCode2 size={16} />
-        {text.projects.detail}
-      </button>
-      {project.finalized && (
-        <button type="button" onClick={() => openSwap(project.token)}>
-          <ArrowUpDown size={16} />
-          {text.projects.trade}
+      <div className="project-actions">
+        <button type="button" onClick={() => window.open(explorerUrl, '_blank', 'noreferrer')}>
+          <ExternalLink size={16} />
+          {text.projects.viewBscScan}
         </button>
-      )}
-      {project.canRefund && (
-        <button
-          type="button"
-          disabled={refundPending}
-          onClick={async () => {
-            setRefundPending(true)
-            try {
-              await submitProjectRefund(project)
-            } finally {
-              setRefundPending(false)
-            }
-          }}
-        >
-          <Wallet size={16} />
-          {refundPending ? text.projects.whitelistPending : text.projects.refund}
+        <button type="button" onClick={() => openProjectDetail(project.token)}>
+          <FileCode2 size={16} />
+          {text.projects.detail}
         </button>
-      )}
+        {project.finalized && (
+          <button type="button" onClick={() => openSwap(project.token)}>
+            <ArrowUpDown size={16} />
+            {text.projects.trade}
+          </button>
+        )}
+        {project.canRefund && (
+          <button
+            type="button"
+            disabled={refundPending}
+            onClick={async () => {
+              setRefundPending(true)
+              try {
+                await submitProjectRefund(project)
+              } finally {
+                setRefundPending(false)
+              }
+            }}
+          >
+            <Wallet size={16} />
+            {refundPending ? text.projects.whitelistPending : text.projects.refund}
+          </button>
+        )}
+      </div>
       {canManageWhitelist && (
         <form
           className="whitelist-manager"
@@ -3238,6 +3359,30 @@ function readSwapTokenFromHash() {
 function readDetailTokenFromHash() {
   const query = window.location.hash.split('?')[1] ?? ''
   return new URLSearchParams(query).get('token') ?? ''
+}
+
+function normalizeMintInput(value: string) {
+  const digits = value.replace(/\D/g, '').replace(/^0+(?=\d)/, '')
+
+  return digits || '1'
+}
+
+function getMintCostWei(project: LaunchProject, quantity: string) {
+  const mintQuantity = /^\d+$/.test(quantity.trim()) ? BigInt(quantity.trim()) : 1n
+
+  return BigInt(project.mintPriceWei || '0') * mintQuantity
+}
+
+function formatMintCost(project: LaunchProject, quantity: string) {
+  return `${formatWeiAmount(getMintCostWei(project, quantity))} ${project.paymentSymbol}`
+}
+
+function formatWeiAmount(value: bigint) {
+  const unit = 1_000_000_000_000_000_000n
+  const whole = value / unit
+  const fraction = (value % unit).toString().padStart(18, '0').replace(/0+$/, '').slice(0, 6)
+
+  return fraction ? `${whole}.${fraction}` : whole.toString()
 }
 
 function formatBps(value: number) {

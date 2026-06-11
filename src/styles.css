@@ -695,8 +695,8 @@ a {
 
 .project-card {
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 11px;
+  padding: 16px;
 }
 
 .project-empty {
@@ -798,7 +798,7 @@ a {
 
 .project-description {
   display: -webkit-box;
-  min-height: 48px;
+  min-height: 40px;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -860,6 +860,10 @@ a {
   min-height: 34px;
 }
 
+.project-links:empty {
+  display: none;
+}
+
 .project-links a {
   display: grid;
   width: 34px;
@@ -897,6 +901,12 @@ a {
   animation: progressFlow 4s linear infinite;
 }
 
+.project-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .project-card button {
   display: inline-flex;
   align-items: center;
@@ -918,6 +928,64 @@ a {
   border-color: rgba(141, 247, 196, 0.5);
   color: var(--accent);
   background: rgba(141, 247, 196, 0.08);
+}
+
+.mint-panel {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgba(141, 247, 196, 0.24);
+  border-radius: var(--radius);
+  background: rgba(141, 247, 196, 0.065);
+}
+
+.mint-panel > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.mint-panel label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mint-panel label span,
+.mint-panel em {
+  color: var(--accent-2);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.mint-panel input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(104, 164, 154, 0.22);
+  border-radius: var(--radius);
+  outline: 0;
+  padding: 0 10px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.2);
+  font-weight: 900;
+}
+
+.mint-panel input:focus {
+  border-color: rgba(141, 247, 196, 0.48);
+  box-shadow: 0 0 0 3px rgba(141, 247, 196, 0.08);
+}
+
+.mint-panel strong {
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.mint-panel .submit-button {
+  min-height: 40px;
+  color: #03100b;
 }
 
 .whitelist-manager {

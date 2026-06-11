@@ -65,11 +65,13 @@ const mintVaultAbi = [
   'function tokensPerMint() view returns (uint256)',
   'function mintedByWallet(address account) view returns (uint256)',
   'function paidByWallet(address account) view returns (uint256)',
+  'function whitelistRemaining(address account) view returns (uint256)',
 ] as const
 
 const mintVaultWriteAbi = [
   'function setWhitelistAllowance(address account,uint256 allowance)',
   'function claimRefund()',
+  'function mint(uint256 quantity) payable',
 ] as const
 
 const tokenWriteAbi = [
@@ -139,6 +141,8 @@ const messages = {
     invalidWhitelistAllowance: '白名单额度必须是大于 0 的整数。',
     invalidVault: 'Vault 地址无效。',
     invalidRefundAmount: '退款代币数量无效。',
+    invalidMintQuantity: 'Mint 数量必须是大于 0 的整数。',
+    invalidPaymentToken: '付款代币地址无效。',
   },
   en: {
     factoryMissing: 'Launch Factory is not configured. Deploy the Factory and set VITE_LAUNCHPAD_FACTORY_ADDRESS first.',
@@ -164,6 +168,8 @@ const messages = {
     invalidWhitelistAllowance: 'Whitelist allowance must be an integer greater than 0.',
     invalidVault: 'Vault address is invalid.',
     invalidRefundAmount: 'Refund token amount is invalid.',
+    invalidMintQuantity: 'Mint quantity must be an integer greater than 0.',
+    invalidPaymentToken: 'Payment token address is invalid.',
   },
 } as const
 
@@ -371,6 +377,99 @@ export async function approveProjectRefundTokens(
   return { hash }
 }
 
+export async function approveProjectMintPayment(
+  provider: EthereumProvider,
+  paymentToken: string,
+  vaultAddress: string,
+  paymentAmount: string,
+  locale: LaunchpadLocale = 'zh',
+): Promise<LaunchTransactionResult> {
+  const text = messages[locale]
+
+  if (!isAddress(paymentToken) || paymentToken.toLowerCase() === ZeroAddress) {
+    throw new Error(text.invalidPaymentToken)
+  }
+  if (!isAddress(vaultAddress)) {
+    throw new Error(text.invalidVault)
+  }
+
+  const amount = BigInt(paymentAmount || '0')
+  if (amount <= 0n) {
+    throw new Error(text.invalidMintQuantity)
+  }
+
+  const chainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
+  if (Number.parseInt(chainId, 16) !== launchpadConfig.chainId) {
+    throw new Error(text.wrongNetwork)
+  }
+
+  const accounts = (await provider.request({ method: 'eth_accounts' })) as string[]
+  const from = accounts[0]
+  if (!from || !isAddress(from)) {
+    throw new Error(text.connectWallet)
+  }
+
+  const iface = new Interface(tokenWriteAbi)
+  const data = iface.encodeFunctionData('approve', [vaultAddress, amount])
+  const hash = (await provider.request({
+    method: 'eth_sendTransaction',
+    params: [
+      {
+        from,
+        to: paymentToken,
+        data,
+      },
+    ],
+  })) as string
+
+  return { hash }
+}
+
+export async function mintLaunchProject(
+  provider: EthereumProvider,
+  project: LaunchProject,
+  quantity: string,
+  locale: LaunchpadLocale = 'zh',
+): Promise<LaunchTransactionResult> {
+  const text = messages[locale]
+
+  if (!isAddress(project.vault)) {
+    throw new Error(text.invalidVault)
+  }
+  if (!/^\d+$/.test(quantity.trim()) || BigInt(quantity.trim()) <= 0n) {
+    throw new Error(text.invalidMintQuantity)
+  }
+
+  const chainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
+  if (Number.parseInt(chainId, 16) !== launchpadConfig.chainId) {
+    throw new Error(text.wrongNetwork)
+  }
+
+  const accounts = (await provider.request({ method: 'eth_accounts' })) as string[]
+  const from = accounts[0]
+  if (!from || !isAddress(from)) {
+    throw new Error(text.connectWallet)
+  }
+
+  const mintQuantity = BigInt(quantity.trim())
+  const cost = BigInt(project.mintPriceWei || '0') * mintQuantity
+  const iface = new Interface(mintVaultWriteAbi)
+  const data = iface.encodeFunctionData('mint', [mintQuantity])
+  const hash = (await provider.request({
+    method: 'eth_sendTransaction',
+    params: [
+      {
+        from,
+        to: project.vault,
+        value: project.paymentToken.toLowerCase() === ZeroAddress ? toBeHex(cost) : '0x0',
+        data,
+      },
+    ],
+  })) as string
+
+  return { hash }
+}
+
 export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]> {
   if (!isLaunchpadConfigured) {
     return []
@@ -425,6 +524,8 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       userMintedCount,
       userPaid,
       refundAllowance,
+      whitelistRemaining,
+      mintPaymentAllowance,
       vaultTokenBalance,
     ] = await Promise.all([
       token.name().catch(() => 'Unknown'),
@@ -440,6 +541,10 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       account && isAddress(account) ? vault.mintedByWallet(account).catch(() => 0n) : 0n,
       account && isAddress(account) ? vault.paidByWallet(account).catch(() => 0n) : 0n,
       account && isAddress(account) ? token.allowance(account, vaultAddress).catch(() => 0n) : 0n,
+      account && isAddress(account) ? vault.whitelistRemaining(account).catch(() => 0n) : 0n,
+      account && isAddress(account) && paymentToken.toLowerCase() !== ZeroAddress
+        ? new Contract(paymentToken, tokenAbi, provider).allowance(account, vaultAddress).catch(() => 0n)
+        : 0n,
       token.balanceOf(vaultAddress).catch(() => 0n),
     ])
 
@@ -473,6 +578,8 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       whitelistMintCount: BigInt(vaultWhitelistLimit).toString(),
       publicMintCount: BigInt(vaultPublicLimit).toString(),
       mintPrice: formatMintPrice(mintPrice, paymentToken),
+      mintPriceWei: mintPrice.toString(),
+      paymentSymbol: getPaymentSymbol(paymentToken),
       mintedCount: mintedCountValue.toString(),
       whitelistMintedCount: BigInt(whitelistMintedCount).toString(),
       publicMintedCount: BigInt(publicMintedCount).toString(),
@@ -483,6 +590,8 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       refundNeedsApproval: canRefund && BigInt(refundAllowance) < refundTokenAmount,
       userRefundAmount: formatRefundAmount(BigInt(userPaid), paymentToken),
       canRefund,
+      whitelistRemaining: BigInt(whitelistRemaining).toString(),
+      mintPaymentAllowance: BigInt(mintPaymentAllowance).toString(),
       rewardToken,
       rewardThreshold: formatUnits(rewardThreshold, 18),
       buyTaxBps,
@@ -645,7 +754,7 @@ function parseMetadata(metadataUri: string): ProjectMetadata {
 }
 
 function formatMintPrice(value: bigint, paymentToken: string) {
-  return paymentToken.toLowerCase() === ZeroAddress ? `${formatEther(value)} BNB` : formatUnits(value, 18)
+  return `${paymentToken.toLowerCase() === ZeroAddress ? formatEther(value) : formatUnits(value, 18)} ${getPaymentSymbol(paymentToken)}`
 }
 
 function formatRefundAmount(value: bigint, paymentToken: string) {
@@ -653,7 +762,15 @@ function formatRefundAmount(value: bigint, paymentToken: string) {
     return ''
   }
 
-  return paymentToken.toLowerCase() === ZeroAddress ? `${formatEther(value)} BNB` : formatUnits(value, 18)
+  return `${paymentToken.toLowerCase() === ZeroAddress ? formatEther(value) : formatUnits(value, 18)} ${getPaymentSymbol(paymentToken)}`
+}
+
+function getPaymentSymbol(paymentToken: string) {
+  if (paymentToken.toLowerCase() === ZeroAddress) {
+    return 'BNB'
+  }
+
+  return paymentToken.toLowerCase() === USDT_ADDRESS.toLowerCase() ? 'USDT' : 'TOKEN'
 }
 
 function delay(ms: number) {

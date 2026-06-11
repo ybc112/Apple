@@ -71,6 +71,8 @@ export type LaunchProject = {
   totalSupply: string
   mintCount: string
   mintPrice: string
+  mintPriceWei: string
+  paymentSymbol: string
   mintedCount: string
   publicMintCount: string
   whitelistMintCount: string
@@ -83,6 +85,8 @@ export type LaunchProject = {
   refundNeedsApproval: boolean
   userRefundAmount: string
   canRefund: boolean
+  whitelistRemaining: string
+  mintPaymentAllowance: string
   rewardToken: string
   rewardThreshold: string
   buyTaxBps: number
