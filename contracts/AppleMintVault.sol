@@ -13,13 +13,18 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     address public immutable paymentToken;
     address public receiver;
     uint256 public immutable totalMints;
+    uint256 public immutable whitelistMintLimit;
+    uint256 public immutable publicMintLimit;
     uint256 public immutable mintPrice;
     uint256 public immutable tokensPerMint;
     uint256 public mintedCount;
+    uint256 public whitelistMintedCount;
+    uint256 public publicMintedCount;
     bool public paused;
     bool public whitelistEnabled;
 
     mapping(address account => uint256 allowance) public whitelistAllowance;
+    mapping(address account => uint256 minted) public whitelistMintedByWallet;
     mapping(address account => uint256 mintedByWallet) public mintedByWallet;
 
     error InvalidQuantity();
@@ -30,7 +35,14 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     error NotWhitelisted();
     error LengthMismatch();
 
-    event Minted(address indexed minter, uint256 quantity, uint256 tokenAmount, uint256 paid);
+    event Minted(
+        address indexed minter,
+        uint256 quantity,
+        uint256 whitelistQuantity,
+        uint256 publicQuantity,
+        uint256 tokenAmount,
+        uint256 paid
+    );
     event ReceiverUpdated(address indexed receiver);
     event PausedUpdated(bool paused);
     event WhitelistEnabledUpdated(bool enabled);
@@ -39,16 +51,21 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     constructor(
         address token_,
         address paymentToken_,
+        address owner_,
         address receiver_,
         uint256 totalSupply_,
         uint256 totalMints_,
         uint256 mintPrice_,
+        uint256 whitelistMintLimit_,
         bool whitelistEnabled_
     )
-        Ownable(receiver_)
+        Ownable(owner_)
     {
-        if (token_ == address(0) || receiver_ == address(0) || totalMints_ == 0) {
+        if (token_ == address(0) || owner_ == address(0) || receiver_ == address(0) || totalMints_ == 0) {
             revert ZeroAddress();
+        }
+        if (whitelistMintLimit_ > totalMints_) {
+            revert InvalidQuantity();
         }
 
         uint256 perMint = totalSupply_ / totalMints_;
@@ -60,6 +77,8 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         paymentToken = paymentToken_;
         receiver = receiver_;
         totalMints = totalMints_;
+        whitelistMintLimit = whitelistMintLimit_;
+        publicMintLimit = totalMints_ - whitelistMintLimit_;
         mintPrice = mintPrice_;
         tokensPerMint = perMint;
         whitelistEnabled = whitelistEnabled_;
@@ -78,12 +97,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
 
         uint256 cost = quote(quantity);
         uint256 tokenAmount = tokensPerMint * quantity;
-        mintedCount += quantity;
-        mintedByWallet[msg.sender] += quantity;
-
-        if (whitelistEnabled && mintedByWallet[msg.sender] > whitelistAllowance[msg.sender]) {
-            revert NotWhitelisted();
-        }
+        (uint256 whitelistQuantity, uint256 publicQuantity) = _consumeMintQuota(msg.sender, quantity);
 
         if (mintedCount == totalMints) {
             tokenAmount = token.balanceOf(address(this));
@@ -106,7 +120,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
 
         token.safeTransfer(msg.sender, tokenAmount);
-        emit Minted(msg.sender, quantity, tokenAmount, cost);
+        emit Minted(msg.sender, quantity, whitelistQuantity, publicQuantity, tokenAmount, cost);
     }
 
     function quote(uint256 quantity) public view returns (uint256) {
@@ -159,9 +173,17 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
 
     function whitelistRemaining(address account) external view returns (uint256) {
         uint256 allowance = whitelistAllowance[account];
-        uint256 minted = mintedByWallet[account];
+        uint256 minted = whitelistMintedByWallet[account];
+        uint256 remainingLimit = whitelistMintLimit > whitelistMintedCount
+            ? whitelistMintLimit - whitelistMintedCount
+            : 0;
 
-        return minted >= allowance ? 0 : allowance - minted;
+        if (minted >= allowance) {
+            return 0;
+        }
+
+        uint256 remainingAllowance = allowance - minted;
+        return remainingAllowance < remainingLimit ? remainingAllowance : remainingLimit;
     }
 
     function setReceiver(address nextReceiver) external onlyOwner {
@@ -185,6 +207,48 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
             revert ZeroAddress();
         }
         IERC20(paymentToken).safeTransfer(receiver, amount);
+    }
+
+    function _consumeMintQuota(address minter, uint256 quantity)
+        private
+        returns (uint256 whitelistQuantity, uint256 publicQuantity)
+    {
+        uint256 remainingQuantity = quantity;
+
+        if (whitelistEnabled && whitelistMintedCount < whitelistMintLimit) {
+            uint256 allowance = whitelistAllowance[minter];
+            uint256 usedAllowance = whitelistMintedByWallet[minter];
+
+            if (allowance > usedAllowance) {
+                uint256 remainingAllowance = allowance - usedAllowance;
+                uint256 remainingWhitelistSlots = whitelistMintLimit - whitelistMintedCount;
+                whitelistQuantity = _min(remainingQuantity, _min(remainingAllowance, remainingWhitelistSlots));
+                remainingQuantity -= whitelistQuantity;
+            }
+        }
+
+        publicQuantity = remainingQuantity;
+        if (publicMintedCount + publicQuantity > publicMintLimit) {
+            if (whitelistEnabled && whitelistQuantity == 0) {
+                revert NotWhitelisted();
+            }
+            revert MintSoldOut();
+        }
+
+        mintedCount += quantity;
+        mintedByWallet[minter] += quantity;
+
+        if (whitelistQuantity > 0) {
+            whitelistMintedCount += whitelistQuantity;
+            whitelistMintedByWallet[minter] += whitelistQuantity;
+        }
+        if (publicQuantity > 0) {
+            publicMintedCount += publicQuantity;
+        }
+    }
+
+    function _min(uint256 left, uint256 right) private pure returns (uint256) {
+        return left < right ? left : right;
     }
 
     receive() external payable {}

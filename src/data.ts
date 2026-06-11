@@ -13,6 +13,7 @@ export const BNB_CHAIN = {
 }
 
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+export const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'
 
 export const initialForm: FormState = {
   tokenName: 'Apple',
@@ -21,9 +22,11 @@ export const initialForm: FormState = {
     'Apple Seed Launch：面向社区的链上发射实验，独立代币、独立金库、公开 mint，关键参数全部写入链上。',
   supply: '1000000000',
   mintCount: '2000',
+  publicMintCount: '1800',
+  whitelistMintCount: '200',
   mintPrice: '0.003',
   paymentToken: ZERO_ADDRESS,
-  rewardToken: ZERO_ADDRESS,
+  rewardToken: '',
   rewardThreshold: '1',
   receiverWallet: '',
   telegram: '',
@@ -32,7 +35,7 @@ export const initialForm: FormState = {
 }
 
 export const initialAllocation: AllocationState = {
-  marketing: 56,
+  marketing: 44,
   liquidity: 18,
   rewards: 16,
   burn: 10,
@@ -84,28 +87,28 @@ export const allocationMeta: Array<{
   color: string
 }> = [
   {
+    key: 'burn',
+    label: '销毁',
+    hint: '减少供应',
+    color: '#ff8a9a',
+  },
+  {
     key: 'marketing',
-    label: 'Growth',
-    hint: '进入接收地址',
+    label: '营销',
+    hint: '进入接收钱包',
     color: '#9bf6c2',
   },
   {
     key: 'liquidity',
-    label: 'Liquidity',
-    hint: '预留给流动性',
+    label: '回流',
+    hint: 'LP 进入黑洞',
     color: '#7dd3fc',
   },
   {
     key: 'rewards',
-    label: 'Rewards',
-    hint: '持有者奖励',
+    label: '持币分红',
+    hint: '进入分红池',
     color: '#b8c7ff',
-  },
-  {
-    key: 'burn',
-    label: 'Burn',
-    hint: '减少供应',
-    color: '#ff8a9a',
   },
 ]
 
@@ -123,15 +126,9 @@ export const paymentTokens = [
     note: '原生 BNB mint',
   },
   {
-    label: 'USD1',
-    symbol: 'USD1',
-    address: '0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d',
-    note: 'BSC USD1',
-  },
-  {
     label: 'USDT',
     symbol: 'USDT',
-    address: '0x55d398326f99059fF775485246999027B3197955',
+    address: USDT_ADDRESS,
     note: 'BSC USDT',
   },
 ]

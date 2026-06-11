@@ -7,12 +7,14 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 contract AppleToken is ERC20, Ownable {
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint16 public constant MAX_TAX_BPS = 2_500;
+    address public constant LP_BLACK_HOLE = 0x000000000000000000000000000000000000dEaD;
 
     string public projectUri;
     bytes32 public templateId;
     address public factory;
     address public launchVault;
     address public receiver;
+    address public dividendReceiver;
     address public paymentToken;
     address public rewardToken;
     uint256 public rewardThreshold;
@@ -53,9 +55,28 @@ contract AppleToken is ERC20, Ownable {
     }
 
     event LaunchVaultSet(address indexed vault);
-    event TaxConfigUpdated(uint16 buyTaxBps, uint16 sellTaxBps);
+    event ReceiverUpdated(address indexed receiver);
+    event DividendReceiverUpdated(address indexed dividendReceiver);
+    event RewardConfigUpdated(address indexed rewardToken, uint256 rewardThreshold);
+    event TaxConfigUpdated(
+        uint16 buyTaxBps,
+        uint16 sellTaxBps,
+        uint16 fundFeeBps,
+        uint16 lpFeeBps,
+        uint16 dividendFeeBps,
+        uint16 burnFeeBps
+    );
     event TaxExemptUpdated(address indexed account, bool enabled);
     event AutomatedMarketMakerPairUpdated(address indexed pair, bool enabled);
+    event TaxRouted(
+        address indexed from,
+        address indexed to,
+        uint256 marketingAmount,
+        uint256 lpBlackHoleAmount,
+        uint256 dividendAmount,
+        uint256 burnAmount,
+        uint256 netAmount
+    );
 
     constructor(
         LaunchConfig memory launchConfig,
@@ -73,6 +94,7 @@ contract AppleToken is ERC20, Ownable {
         projectUri = launchConfig.projectUri;
         templateId = launchConfig.templateId;
         receiver = launchConfig.receiver;
+        dividendReceiver = launchConfig.receiver;
         paymentToken = launchConfig.paymentToken;
         rewardToken = launchConfig.rewardToken;
         rewardThreshold = launchConfig.rewardThreshold;
@@ -81,6 +103,7 @@ contract AppleToken is ERC20, Ownable {
         isTaxExempt[msg.sender] = true;
         isTaxExempt[initialHolder] = true;
         isTaxExempt[launchConfig.receiver] = true;
+        isTaxExempt[LP_BLACK_HOLE] = true;
 
         _mint(initialHolder, launchConfig.totalSupply);
     }
@@ -100,6 +123,32 @@ contract AppleToken is ERC20, Ownable {
 
     function setTaxes(TaxConfig calldata taxConfig) external onlyOwner {
         _setTaxes(taxConfig);
+    }
+
+    function setReceiver(address nextReceiver) external onlyOwner {
+        if (nextReceiver == address(0)) {
+            revert ZeroAddress();
+        }
+
+        receiver = nextReceiver;
+        isTaxExempt[nextReceiver] = true;
+        emit ReceiverUpdated(nextReceiver);
+    }
+
+    function setDividendReceiver(address nextDividendReceiver) external onlyOwner {
+        if (nextDividendReceiver == address(0)) {
+            revert ZeroAddress();
+        }
+
+        dividendReceiver = nextDividendReceiver;
+        isTaxExempt[nextDividendReceiver] = true;
+        emit DividendReceiverUpdated(nextDividendReceiver);
+    }
+
+    function setRewardConfig(address nextRewardToken, uint256 nextRewardThreshold) external onlyOwner {
+        rewardToken = nextRewardToken;
+        rewardThreshold = nextRewardThreshold;
+        emit RewardConfigUpdated(nextRewardToken, nextRewardThreshold);
     }
 
     function setTaxExempt(address account, bool enabled) external onlyOwner {
@@ -135,7 +184,14 @@ contract AppleToken is ERC20, Ownable {
         dividendFeeBps = taxConfig.dividendFeeBps;
         burnFeeBps = taxConfig.burnFeeBps;
 
-        emit TaxConfigUpdated(taxConfig.buyTaxBps, taxConfig.sellTaxBps);
+        emit TaxConfigUpdated(
+            taxConfig.buyTaxBps,
+            taxConfig.sellTaxBps,
+            taxConfig.fundFeeBps,
+            taxConfig.lpFeeBps,
+            taxConfig.dividendFeeBps,
+            taxConfig.burnFeeBps
+        );
     }
 
     function _update(address from, address to, uint256 value) internal override {
@@ -162,17 +218,36 @@ contract AppleToken is ERC20, Ownable {
             return;
         }
 
-        uint256 splitTotal = uint256(fundFeeBps) + lpFeeBps + dividendFeeBps + burnFeeBps;
-        uint256 burnAmount = splitTotal == 0 ? 0 : (fee * burnFeeBps) / splitTotal;
-        uint256 receiverAmount = fee - burnAmount;
+        uint256 marketingAmount = (fee * fundFeeBps) / BPS_DENOMINATOR;
+        uint256 lpBlackHoleAmount = (fee * lpFeeBps) / BPS_DENOMINATOR;
+        uint256 dividendAmount = (fee * dividendFeeBps) / BPS_DENOMINATOR;
+        uint256 burnAmount = (fee * burnFeeBps) / BPS_DENOMINATOR;
+        uint256 routedAmount = marketingAmount + lpBlackHoleAmount + dividendAmount + burnAmount;
+        marketingAmount += fee - routedAmount;
 
-        if (receiverAmount > 0) {
-            super._update(from, receiver, receiverAmount);
+        if (marketingAmount > 0) {
+            super._update(from, receiver, marketingAmount);
+        }
+        if (lpBlackHoleAmount > 0) {
+            super._update(from, LP_BLACK_HOLE, lpBlackHoleAmount);
+        }
+        if (dividendAmount > 0) {
+            super._update(from, dividendReceiver, dividendAmount);
         }
         if (burnAmount > 0) {
             super._update(from, address(0), burnAmount);
         }
 
-        super._update(from, to, value - fee);
+        uint256 netAmount = value - fee;
+        super._update(from, to, netAmount);
+        emit TaxRouted(
+            from,
+            to,
+            marketingAmount,
+            lpBlackHoleAmount,
+            dividendAmount,
+            burnAmount,
+            netAmount
+        );
     }
 }

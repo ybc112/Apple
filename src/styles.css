@@ -739,6 +739,35 @@ a {
   line-height: 1.55;
 }
 
+.project-identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.project-identity > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-card .copy-address {
+  min-height: 28px;
+  padding: 0 9px;
+  border-color: rgba(141, 247, 196, 0.26);
+  color: var(--accent-2);
+  font-size: 12px;
+}
+
+.project-card .copy-address.copied {
+  border-color: rgba(141, 247, 196, 0.56);
+  color: var(--accent);
+  background: rgba(141, 247, 196, 0.12);
+}
+
 .project-description {
   display: -webkit-box;
   min-height: 48px;
@@ -769,6 +798,16 @@ a {
 .progress-row strong,
 .project-meta span {
   color: var(--accent);
+}
+
+.project-quota {
+  padding: 9px 11px;
+  border: 1px solid rgba(139, 215, 255, 0.2);
+  border-radius: var(--radius);
+  color: #d7e6e2;
+  background: rgba(139, 215, 255, 0.055);
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .project-links {
@@ -835,6 +874,45 @@ a {
   border-color: rgba(141, 247, 196, 0.5);
   color: var(--accent);
   background: rgba(141, 247, 196, 0.08);
+}
+
+.whitelist-manager {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(141, 247, 196, 0.2);
+  border-radius: var(--radius);
+  background: rgba(141, 247, 196, 0.055);
+}
+
+.whitelist-manager > strong {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.whitelist-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 8px;
+}
+
+.whitelist-fields input {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid rgba(104, 164, 154, 0.22);
+  border-radius: var(--radius);
+  outline: 0;
+  padding: 0 10px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.whitelist-fields input:focus {
+  border-color: rgba(141, 247, 196, 0.48);
+  box-shadow: 0 0 0 3px rgba(141, 247, 196, 0.08);
 }
 
 .project-skeleton {
@@ -995,6 +1073,14 @@ a {
 .slider-field span {
   color: #bdcac5;
   font-size: 13px;
+  font-weight: 850;
+}
+
+.field em {
+  margin-top: -2px;
+  color: var(--accent-2);
+  font-size: 12px;
+  font-style: normal;
   font-weight: 850;
 }
 
@@ -1164,6 +1250,23 @@ a {
   font-size: 12px;
   font-style: normal;
   line-height: 1.45;
+}
+
+.quota-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid rgba(139, 215, 255, 0.22);
+  border-radius: var(--radius);
+  color: #cfe1dd;
+  background: rgba(139, 215, 255, 0.06);
+  font-weight: 900;
+}
+
+.quota-summary strong {
+  color: var(--accent);
 }
 
 .template-grid,
@@ -1887,7 +1990,8 @@ input[type="range"]::-moz-range-thumb {
   .payment-grid,
   .tax-split,
   .launch-side,
-  .link-field {
+  .link-field,
+  .whitelist-fields {
     grid-template-columns: 1fr;
   }
 

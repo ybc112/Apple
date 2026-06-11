@@ -20,6 +20,8 @@ export type FormState = {
   description: string
   supply: string
   mintCount: string
+  publicMintCount: string
+  whitelistMintCount: string
   mintPrice: string
   paymentToken: string
   rewardToken: string
@@ -70,6 +72,10 @@ export type LaunchProject = {
   mintCount: string
   mintPrice: string
   mintedCount: string
+  publicMintCount: string
+  whitelistMintCount: string
+  publicMintedCount: string
+  whitelistMintedCount: string
   progress: number
   whitelistEnabled: boolean
   createdAt: number

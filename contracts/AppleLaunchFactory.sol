@@ -7,6 +7,10 @@ import { AppleToken } from "./AppleToken.sol";
 import { AppleMintVault } from "./AppleMintVault.sol";
 
 contract AppleLaunchFactory is Ownable, ReentrancyGuard {
+    uint16 public constant BPS_DENOMINATOR = 10_000;
+    uint16 public constant MAX_TAX_BPS = 2_500;
+    address public constant DEFAULT_REWARD_TOKEN = 0x55d398326f99059fF775485246999027B3197955;
+
     uint256 public creationFee;
     address public feeRecipient;
     address[] public allTokens;
@@ -29,6 +33,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         uint16 lpFeeBps;
         uint16 dividendFeeBps;
         uint16 burnFeeBps;
+        uint256 whitelistMintCount;
         bool whitelistEnabled;
     }
 
@@ -41,13 +46,25 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         bytes32 templateId;
         uint256 totalSupply;
         uint256 mintCount;
+        uint256 whitelistMintCount;
+        uint256 publicMintCount;
         uint256 mintPrice;
         bool whitelistEnabled;
         string metadataUri;
         uint64 createdAt;
+        address rewardToken;
+        uint256 rewardThreshold;
+        uint16 buyTaxBps;
+        uint16 sellTaxBps;
+        uint16 fundFeeBps;
+        uint16 lpFeeBps;
+        uint16 dividendFeeBps;
+        uint16 burnFeeBps;
     }
 
     mapping(address token => Project project) public projects;
+    mapping(address creator => address[] tokens) private _creatorTokens;
+    mapping(bytes32 templateId => address[] tokens) private _templateTokens;
 
     error InvalidFee();
     error InvalidParams();
@@ -69,6 +86,12 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
     );
     event CreationFeeUpdated(uint256 creationFee);
     event FeeRecipientUpdated(address indexed feeRecipient);
+    event ProjectIndexed(
+        address indexed creator,
+        bytes32 indexed templateId,
+        address indexed token,
+        address vault
+    );
 
     constructor(address feeRecipient_, uint256 creationFee_) Ownable(msg.sender) {
         if (feeRecipient_ == address(0)) {
@@ -91,6 +114,9 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         bytes32 tokenSalt = keccak256(
             abi.encodePacked(msg.sender, salt, params.name, params.symbol, block.chainid)
         );
+        address rewardToken = params.rewardToken == address(0)
+            ? DEFAULT_REWARD_TOKEN
+            : params.rewardToken;
 
         AppleToken launchToken = new AppleToken{ salt: tokenSalt }(
             AppleToken.LaunchConfig({
@@ -100,7 +126,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
                 templateId: params.templateId,
                 receiver: params.receiver,
                 paymentToken: params.paymentToken,
-                rewardToken: params.rewardToken,
+                rewardToken: rewardToken,
                 rewardThreshold: params.rewardThreshold,
                 totalSupply: params.totalSupply
             }),
@@ -120,10 +146,12 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         }(
             address(launchToken),
             params.paymentToken,
+            msg.sender,
             params.receiver,
             params.totalSupply,
             params.mintCount,
             params.mintPrice,
+            params.whitelistMintCount,
             params.whitelistEnabled
         );
 
@@ -132,7 +160,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
 
         launchToken.setLaunchVault(vault);
         launchToken.transfer(vault, params.totalSupply);
-        launchToken.transferOwnership(params.receiver);
+        launchToken.transferOwnership(msg.sender);
 
         projects[token] = Project({
             creator: msg.sender,
@@ -143,12 +171,24 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             templateId: params.templateId,
             totalSupply: params.totalSupply,
             mintCount: params.mintCount,
+            whitelistMintCount: params.whitelistMintCount,
+            publicMintCount: params.mintCount - params.whitelistMintCount,
             mintPrice: params.mintPrice,
             whitelistEnabled: params.whitelistEnabled,
             metadataUri: params.metadataUri,
-            createdAt: uint64(block.timestamp)
+            createdAt: uint64(block.timestamp),
+            rewardToken: rewardToken,
+            rewardThreshold: params.rewardThreshold,
+            buyTaxBps: params.buyTaxBps,
+            sellTaxBps: params.sellTaxBps,
+            fundFeeBps: params.fundFeeBps,
+            lpFeeBps: params.lpFeeBps,
+            dividendFeeBps: params.dividendFeeBps,
+            burnFeeBps: params.burnFeeBps
         });
         allTokens.push(token);
+        _creatorTokens[msg.sender].push(token);
+        _templateTokens[params.templateId].push(token);
 
         emit LaunchCreated(
             msg.sender,
@@ -164,10 +204,48 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             params.whitelistEnabled,
             params.metadataUri
         );
+        emit ProjectIndexed(msg.sender, params.templateId, token, vault);
     }
 
     function allTokensLength() external view returns (uint256) {
         return allTokens.length;
+    }
+
+    function creatorTokensLength(address creator) external view returns (uint256) {
+        return _creatorTokens[creator].length;
+    }
+
+    function creatorTokenAt(address creator, uint256 index) external view returns (address) {
+        return _creatorTokens[creator][index];
+    }
+
+    function templateTokensLength(bytes32 templateId) external view returns (uint256) {
+        return _templateTokens[templateId].length;
+    }
+
+    function templateTokenAt(bytes32 templateId, uint256 index) external view returns (address) {
+        return _templateTokens[templateId][index];
+    }
+
+    function getProject(address token) external view returns (Project memory) {
+        return projects[token];
+    }
+
+    function getProjects(uint256 offset, uint256 limit) external view returns (Project[] memory items) {
+        uint256 length = allTokens.length;
+        if (offset >= length || limit == 0) {
+            return new Project[](0);
+        }
+
+        uint256 end = offset + limit;
+        if (end > length || end < offset) {
+            end = length;
+        }
+
+        items = new Project[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            items[i - offset] = projects[allTokens[i]];
+        }
     }
 
     function setCreationFee(uint256 nextFee) external onlyOwner {
@@ -188,6 +266,17 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         if (
             bytes(params.name).length == 0 || bytes(params.symbol).length == 0
                 || params.totalSupply == 0 || params.mintCount == 0 || params.receiver == address(0)
+                || params.totalSupply < params.mintCount || params.whitelistMintCount > params.mintCount
+        ) {
+            revert InvalidParams();
+        }
+
+        uint256 splitTotal = uint256(params.fundFeeBps) + params.lpFeeBps + params.dividendFeeBps
+            + params.burnFeeBps;
+
+        if (
+            params.buyTaxBps > MAX_TAX_BPS || params.sellTaxBps > MAX_TAX_BPS
+                || splitTotal > BPS_DENOMINATOR
         ) {
             revert InvalidParams();
         }
