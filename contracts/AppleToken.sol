@@ -135,6 +135,7 @@ contract AppleToken is ERC20, Ownable {
 
         tradingEnabled = true;
         emit TradingEnabled();
+        _transferOwnership(LP_BLACK_HOLE);
     }
 
     function setTaxes(TaxConfig calldata taxConfig) external onlyOwner {

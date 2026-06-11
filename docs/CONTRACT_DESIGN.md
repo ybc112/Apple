@@ -16,6 +16,8 @@
   - Stores project URI, template id, receiver, payment token, reward token, reward threshold, and tax configuration.
   - Keeps normal user transfers locked until the mint vault finalizes the launch.
   - Trading is enabled only by the project's `AppleMintVault` when the launch sells out.
+  - When trading opens, token ownership is automatically transferred to `0x000000000000000000000000000000000000dEaD`.
+  - After trading opens, the creator can no longer change taxes, receivers, reward config, tax exemptions, or AMM pair flags.
   - Supports buy/sell tax against configured AMM pairs.
   - Routes tax by split:
     - Marketing goes to the project receiver.
@@ -36,7 +38,8 @@
   - Tracks `mintedCount`, whitelist minted count, public minted count, per-wallet minted amount, and progress.
   - Separates whitelist quota from public quota through `whitelistMintLimit` and `publicMintLimit`.
   - Supports receiver update and whitelist controls.
-  - Ownership belongs to the project creator, not the receiver wallet.
+  - Ownership belongs to the project creator during the launch window, not the receiver wallet.
+  - When the launch sells out, vault ownership is automatically transferred to `0x000000000000000000000000000000000000dEaD`, so whitelist and receiver settings are locked after trading opens.
 
 - `AppleAuditRegistry`
   - Separate on-chain registry for the auditor system.
@@ -92,8 +95,11 @@ Only the vault owner can update whitelist allowances. The factory sets the vault
 - `mint()` is available only before `refundDeadline` and only while the launch is not finalized.
 - When the final mint slot is filled, the vault calls `AppleToken.finalizeLaunch()` and sends escrowed payment to the receiver.
 - `AppleToken.finalizeLaunch()` can only be called by the assigned vault.
+- `AppleToken.finalizeLaunch()` enables trading and transfers token ownership to the black-hole address.
+- The vault transfers its own ownership to the black-hole address in the same finalization flow.
 - Before finalization, regular transfers between non-exempt addresses revert with `TradingLocked`.
 - After finalization, trading stays enabled; the auditor registry has no function that can pause or stop token trading.
+- After finalization, the project creator cannot change taxes, receivers, tax exemptions, pair flags, whitelist settings, or the vault receiver.
 - `claimRefund()` is available only after `refundDeadline`, only if the launch is not finalized, and only for wallets with a paid mint balance.
 - Refund claims zero the wallet's mint/payment accounting, decrement active mint counters, transfer the minted launch tokens back to the vault, and return the user's BNB/ERC20 payment.
 
@@ -157,23 +163,25 @@ The Swap page is a real frontend integration with PancakeSwap V2 Router on BNB C
 5. Factory deploys token and vault.
 6. Factory transfers all token supply into the vault.
 7. Token ownership goes to the project creator.
-8. Vault ownership belongs to the project creator.
+8. Vault ownership belongs to the project creator during the launch window.
 9. If whitelist mode is enabled, the project creator sets whitelist allowances before mint starts.
 10. Buyers mint from the vault during the 24-hour window.
-11. If sold out, the vault automatically enables trading and pays the receiver.
+11. If sold out, the vault automatically enables trading, pays the receiver, and sends token/vault ownership to the black-hole address.
 12. If not sold out after 24 hours, buyers can approve the vault and call `claimRefund()`.
 
 The current UI only offers BNB and USDT for mint payments. USD1 was removed from the selectable payment-token list. Contracts still support any valid ERC20 payment token if called directly.
 
 ## BNB Chain Deployment
 
-The source code has been updated after the deployment below. Redeploy before using the LP black-hole and indexed query features on mainnet.
-
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
-- Previous Factory: `0x924aF77296c67a613893373Eef2ae0dd2318e0C2`.
-- Deployment transaction: `0x3b8a8317ee588ceae62fda63d43ca253e4e79ab57f12512d1ad0c333cef7de62`.
+- Factory: `0x2a675D757a13bbA48A088dA5af72E8c53F445Ea1`.
+- Audit Registry: `0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084`.
+- Factory deployment transaction: `0x6efc9277b24e833b8ad67350b23899ecf4ba7c5d24ca94ada7f213e59373efc8`.
+- Audit Registry deployment transaction: `0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a`.
 - Fee recipient: `0x0D70FABE5B212f5BE5EFa503a2Dcc4D5C54B6347`.
 - Creation fee: `0.005 BNB`.
+- Factory source is verified on BscScan: `https://bscscan.com/address/0x2a675D757a13bbA48A088dA5af72E8c53F445Ea1#code`.
+- Audit Registry source is verified on BscScan: `https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code`.
 
 ## Test Coverage
 

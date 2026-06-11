@@ -1693,7 +1693,9 @@ function ProjectCard({
       : project.whitelistEnabled ? text.projects.statusWhitelist : text.projects.statusMinting
   const explorerUrl = `${BNB_CHAIN.blockExplorerUrls[0]}/address/${project.token}`
   const canManageWhitelist =
-    Boolean(wallet.account) && wallet.account.toLowerCase() === project.creator.toLowerCase()
+    !project.finalized &&
+    Boolean(wallet.account) &&
+    wallet.account.toLowerCase() === project.creator.toLowerCase()
   const createdAt =
     project.createdAt > 0
       ? new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', {

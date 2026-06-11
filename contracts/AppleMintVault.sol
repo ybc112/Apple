@@ -14,6 +14,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public constant REFUND_WINDOW = 24 hours;
+    address public constant PERMISSION_BLACK_HOLE = 0x000000000000000000000000000000000000dEaD;
 
     ILaunchToken public immutable token;
     address public immutable paymentToken;
@@ -344,6 +345,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
 
         emit LaunchFinalized(paidOut);
+        _transferOwnership(PERMISSION_BLACK_HOLE);
     }
 
     receive() external payable {}

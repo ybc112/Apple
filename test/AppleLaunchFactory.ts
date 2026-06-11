@@ -165,6 +165,8 @@ describe("AppleLaunchFactory", function () {
 
     expect(await vault.finalized()).to.equal(true);
     expect(await token.tradingEnabled()).to.equal(true);
+    expect(await token.owner()).to.equal(await token.LP_BLACK_HOLE());
+    expect(await vault.owner()).to.equal(await vault.PERMISSION_BLACK_HOLE());
     expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
     expect((await ethers.provider.getBalance(dividendReceiver.address)) - receiverBefore).to.equal(cost);
 
@@ -178,6 +180,88 @@ describe("AppleLaunchFactory", function () {
     }
 
     expect(refundBlocked).to.equal(true);
+  });
+
+  it("locks creator permissions to the black hole after trading opens", async function () {
+    const { creator, buyer, pair, dividendReceiver, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+      whitelistMintCount: 1n,
+      whitelistEnabled: true,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-lock-permissions"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await vault.connect(creator).setWhitelistAllowance(buyer.address, 1n);
+    await token.connect(creator).setDividendReceiver(dividendReceiver.address);
+    await token.connect(creator).setAutomatedMarketMakerPair(pair.address, true);
+    await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
+
+    expect(await token.owner()).to.equal(await token.LP_BLACK_HOLE());
+    expect(await vault.owner()).to.equal(await vault.PERMISSION_BLACK_HOLE());
+
+    let taxBlocked = false;
+    try {
+      await token.connect(creator).setTaxes({
+        buyTaxBps: 100,
+        sellTaxBps: 100,
+        fundFeeBps: 10000,
+        lpFeeBps: 0,
+        dividendFeeBps: 0,
+        burnFeeBps: 0,
+      });
+    } catch {
+      taxBlocked = true;
+    }
+    expect(taxBlocked).to.equal(true);
+
+    let receiverBlocked = false;
+    try {
+      await token.connect(creator).setReceiver(dividendReceiver.address);
+    } catch {
+      receiverBlocked = true;
+    }
+    expect(receiverBlocked).to.equal(true);
+
+    let exemptBlocked = false;
+    try {
+      await token.connect(creator).setTaxExempt(buyer.address, true);
+    } catch {
+      exemptBlocked = true;
+    }
+    expect(exemptBlocked).to.equal(true);
+
+    let pairBlocked = false;
+    try {
+      await token.connect(creator).setAutomatedMarketMakerPair(dividendReceiver.address, true);
+    } catch {
+      pairBlocked = true;
+    }
+    expect(pairBlocked).to.equal(true);
+
+    let whitelistBlocked = false;
+    try {
+      await vault.connect(creator).setWhitelistAllowance(dividendReceiver.address, 1n);
+    } catch {
+      whitelistBlocked = true;
+    }
+    expect(whitelistBlocked).to.equal(true);
+
+    let vaultReceiverBlocked = false;
+    try {
+      await vault.connect(creator).setReceiver(dividendReceiver.address);
+    } catch {
+      vaultReceiverBlocked = true;
+    }
+    expect(vaultReceiverBlocked).to.equal(true);
   });
 
   it("locks normal transfers before sellout and unlocks them automatically after sellout", async function () {
@@ -354,9 +438,9 @@ describe("AppleLaunchFactory", function () {
     const token = await ethers.getContractAt("AppleToken", tokenAddress);
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
 
-    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
     await token.connect(creator).setDividendReceiver(dividendReceiver.address);
     await token.connect(creator).setAutomatedMarketMakerPair(pair.address, true);
+    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
 
     const transferAmount = ethers.parseUnits("1000", 18);
     const fee = (transferAmount * BigInt(params.sellTaxBps)) / 10000n;
