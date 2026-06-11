@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { isAddress } from 'ethers'
 import {
   BNB_CHAIN,
   USDT_ADDRESS,
@@ -1652,7 +1653,7 @@ function HomePage({
         }
 
         if (filter === 'whitelist') {
-          return project.whitelistEnabled
+          return project.whitelistEnabled && Number(project.whitelistMintCount) > 0
         }
 
         if (filter === 'completed') {
@@ -1875,6 +1876,7 @@ function ProjectCard({
   const [whitelistError, setWhitelistError] = useState('')
   const [whitelistSaving, setWhitelistSaving] = useState(false)
   const [refundPending, setRefundPending] = useState(false)
+  const detectedWhitelistCount = collectWhitelistAccounts(whitelistBatch).length
   const progress = Math.min(100, Math.max(0, project.progress))
   const mintExpired = project.refundDeadline > 0 && Date.now() >= project.refundDeadline * 1000
   const mintOpen = !project.finalized && progress < 100 && !mintExpired
@@ -1886,10 +1888,12 @@ function ProjectCard({
     ? text.projects.statusTrading
     : progress >= 100
       ? text.projects.statusCompleted
-      : project.whitelistEnabled ? text.projects.statusWhitelist : text.projects.statusMinting
+      : project.whitelistEnabled && Number(project.whitelistMintCount) > 0 ? text.projects.statusWhitelist : text.projects.statusMinting
   const explorerUrl = `${BNB_CHAIN.blockExplorerUrls[0]}/address/${project.token}`
   const canManageWhitelist =
-    !project.finalized &&
+    mintOpen &&
+    project.whitelistEnabled &&
+    Number(project.whitelistMintCount) > 0 &&
     Boolean(wallet.account) &&
     wallet.account.toLowerCase() === project.creator.toLowerCase()
   const createdAt =
@@ -1946,12 +1950,7 @@ function ProjectCard({
         <span>{project.mintPrice}</span>
       </div>
       <div className="project-quota">
-        {text.projects.quota(
-          project.whitelistMintedCount,
-          project.whitelistMintCount,
-          project.publicMintedCount,
-          project.publicMintCount,
-        )}
+        {formatQuotaText(project, text, language)}
       </div>
       <div className={project.canRefund ? 'refund-state available' : 'refund-state'}>
         {project.canRefund && project.userRefundAmount
@@ -2086,6 +2085,11 @@ function ProjectCard({
               onChange={(event) => setWhitelistAllowance(event.target.value)}
             />
           </div>
+          {detectedWhitelistCount > 0 && (
+            <small className="whitelist-detected">
+              {language === 'zh' ? `已识别 ${detectedWhitelistCount} 个地址` : `${detectedWhitelistCount} addresses detected`}
+            </small>
+          )}
           <em>{text.projects.whitelistBatchHint}</em>
           {whitelistError && <small className="form-error">{whitelistError}</small>}
           <button type="submit" disabled={whitelistSaving}>
@@ -3400,27 +3404,51 @@ function normalizeMintInput(value: string) {
   return digits || '1'
 }
 
+function formatQuotaText(project: LaunchProject, text: (typeof copy)[Language], language: Language) {
+  if (!project.whitelistEnabled || Number(project.whitelistMintCount) <= 0) {
+    return language === 'zh'
+      ? `公开 ${project.publicMintedCount}/${project.publicMintCount}`
+      : `Public ${project.publicMintedCount}/${project.publicMintCount}`
+  }
+
+  return text.projects.quota(
+    project.whitelistMintedCount,
+    project.whitelistMintCount,
+    project.publicMintedCount,
+    project.publicMintCount,
+  )
+}
+
+function collectWhitelistAccounts(value: string) {
+  const matches = value.match(/(?:0x)?[a-fA-F0-9]{40}/g) ?? []
+  const uniqueAccounts = new Map<string, string>()
+
+  matches.forEach((rawAccount) => {
+    const account = rawAccount.toLowerCase().startsWith('0x') ? `0x${rawAccount.slice(2)}` : `0x${rawAccount}`
+    if (isAddress(account)) {
+      uniqueAccounts.set(account.toLowerCase(), account)
+    }
+  })
+
+  return [...uniqueAccounts.values()]
+}
+
 function parseWhitelistBatch(
   value: string,
   allowance: string,
   language: Language,
 ): WhitelistAllowanceEntry[] {
   const normalizedAllowance = normalizeMintInput(allowance)
-  const matches = value.match(/0x[a-fA-F0-9]{40}/g) ?? []
-  const uniqueAccounts = new Map<string, string>()
+  const accounts = collectWhitelistAccounts(value)
 
-  matches.forEach((account) => {
-    uniqueAccounts.set(account.toLowerCase(), account)
-  })
-
-  if (uniqueAccounts.size === 0) {
+  if (accounts.length === 0) {
     throw new Error(language === 'zh' ? '请至少粘贴一个有效的钱包地址。' : 'Paste at least one valid wallet address.')
   }
-  if (uniqueAccounts.size > 200) {
+  if (accounts.length > 200) {
     throw new Error(language === 'zh' ? '单次最多提交 200 个白名单地址。' : 'Submit no more than 200 whitelist addresses at once.')
   }
 
-  return [...uniqueAccounts.values()].map((account) => ({
+  return accounts.map((account) => ({
     account,
     allowance: normalizedAllowance,
   }))

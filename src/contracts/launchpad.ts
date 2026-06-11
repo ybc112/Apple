@@ -23,8 +23,21 @@ export const launchpadConfig = {
   chainId: Number(import.meta.env.VITE_LAUNCHPAD_CHAIN_ID ?? 56),
   factoryAddress: String(import.meta.env.VITE_LAUNCHPAD_FACTORY_ADDRESS ?? ''),
   creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? '5000000000000000'),
+  hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
   contractAdapterReady: true,
 }
+
+const hiddenProjectTokens = new Set(
+  launchpadConfig.hiddenProjectTokens
+    .split(/[\s,;]+/)
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => isAddress(token)),
+)
+
+const hiddenProjectShortMatches = [
+  { prefix: '0x3942', suffix: '2a6a' },
+  { prefix: '0x6b1d', suffix: 'e701' },
+]
 
 export const isLaunchpadConfigured =
   Boolean(launchpadConfig.factoryAddress) &&
@@ -552,6 +565,10 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
 
   for (let index = count - 1; index >= start; index -= 1) {
     const tokenAddress = String(await factory.allTokens(index))
+    if (isHiddenLaunchProject(tokenAddress)) {
+      continue
+    }
+
     const project = await readProject(factory, legacyFactory, tokenAddress)
     const creator = String(project.creator ?? project[0])
     const vaultAddress = String(project.vault ?? project[2])
@@ -802,6 +819,17 @@ async function readProject(factory: Contract, legacyFactory: Contract, tokenAddr
   } catch {
     return legacyFactory.projects(tokenAddress)
   }
+}
+
+function isHiddenLaunchProject(tokenAddress: string) {
+  const normalizedToken = tokenAddress.toLowerCase()
+
+  return (
+    hiddenProjectTokens.has(normalizedToken) ||
+    hiddenProjectShortMatches.some(
+      ({ prefix, suffix }) => normalizedToken.startsWith(prefix) && normalizedToken.endsWith(suffix),
+    )
+  )
 }
 
 function percentToBps(value: number) {

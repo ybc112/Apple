@@ -984,8 +984,33 @@ a {
 }
 
 .mint-panel .submit-button {
-  min-height: 40px;
+  min-height: 48px;
   color: #03100b;
+  border-color: rgba(161, 255, 215, 0.78);
+  background:
+    linear-gradient(135deg, #b7ffe0 0%, #6dffc5 46%, #c5dcff 100%);
+  box-shadow:
+    0 16px 34px rgba(109, 255, 197, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  font-size: 18px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.mint-panel .submit-button:hover {
+  border-color: rgba(203, 255, 233, 0.94);
+  color: #02110b;
+  background:
+    linear-gradient(135deg, #d8fff0 0%, #78ffd0 42%, #f4c8ff 100%);
+  transform: translateY(-1px);
+}
+
+.mint-panel .submit-button:disabled {
+  color: rgba(255, 255, 255, 0.58);
+  border-color: rgba(104, 164, 154, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  text-shadow: none;
+  transform: none;
 }
 
 .whitelist-manager {
@@ -1025,9 +1050,16 @@ a {
 }
 
 .whitelist-fields textarea {
-  min-height: 116px;
+  min-height: 168px;
   resize: vertical;
   line-height: 1.5;
+  overflow: auto;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .whitelist-fields input:focus,
@@ -1040,6 +1072,12 @@ a {
   color: var(--muted);
   font-size: 12px;
   font-style: normal;
+}
+
+.whitelist-detected {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .project-skeleton {
