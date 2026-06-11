@@ -359,8 +359,9 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         returns (uint256 whitelistQuantity, uint256 publicQuantity)
     {
         uint256 remainingQuantity = quantity;
+        bool whitelistPhaseActive = whitelistEnabled && whitelistMintedCount < whitelistMintLimit;
 
-        if (whitelistEnabled && whitelistMintedCount < whitelistMintLimit) {
+        if (whitelistPhaseActive) {
             uint256 allowance = whitelistAllowance[minter];
             uint256 usedAllowance = whitelistMintedByWallet[minter];
 
@@ -369,6 +370,11 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
                 uint256 remainingWhitelistSlots = whitelistMintLimit - whitelistMintedCount;
                 whitelistQuantity = _min(remainingQuantity, _min(remainingAllowance, remainingWhitelistSlots));
                 remainingQuantity -= whitelistQuantity;
+            }
+
+            bool whitelistFilledAfterThisMint = whitelistMintedCount + whitelistQuantity >= whitelistMintLimit;
+            if (remainingQuantity > 0 && !whitelistFilledAfterThisMint) {
+                revert NotWhitelisted();
             }
         }
 

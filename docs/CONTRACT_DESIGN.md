@@ -59,7 +59,9 @@ Whitelist mode is controlled per project vault.
 
 - `whitelistEnabled`
   - If `false`, all mint slots are public.
-  - If `true`, whitelisted wallets can consume reserved whitelist slots, while non-whitelisted wallets can only consume remaining public slots.
+  - If `true`, public mint stays closed while whitelist quota remains.
+  - Whitelisted wallets consume reserved whitelist slots first.
+  - If one transaction fills the final whitelist slot, that same transaction may use public quota for any remaining requested quantity.
 
 - `whitelistMintLimit`
   - Number of mint slots reserved for whitelist allocation.
@@ -186,18 +188,18 @@ The current UI only offers BNB and USDT for mint payments. USD1 was removed from
 ## BNB Chain Deployment
 
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
-- Factory: `0x4d966290C9482322a3829919bFCefb5103408542`.
-- Token Deployer: `0xea073eA6a5BaC1142c7AB8155CcC6E696947d69F`.
-- Vault Deployer: `0x0D4194926945d73928eed2F3DcbeF3A324102F85`.
+- Factory: `0x383C58005B01e16E36CA0AB99cAC3a6994c4c2d8`.
+- Token Deployer: `0x0CfA656104eB66558AFf232fD0e2dAc1Fd8543db`.
+- Vault Deployer: `0x92369eeF9D2D0F7a96B0B41533ABAb2Eb8C07745`.
 - Pancake V2 Router: `0x10ED43C718714eb63d5aA57B78B54704E256024E`.
 - Audit Registry: `0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084`.
-- Factory deployment transaction: `0x1d6f4dba602c0e332b637d43e1c26fa9a3011726330d7e4fce5a414282e5f874`.
+- Factory deployment transaction: `0x060a693589bb456ff4c9434a3e46bb23d451daabffb4e113d008cae94ca1bb4e`.
 - Audit Registry deployment transaction: `0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a`.
 - Fee recipient: configured by environment variable during deployment.
 - Creation fee: `0.005 BNB`.
-- Factory source is verified on BscScan: `https://bscscan.com/address/0x4d966290C9482322a3829919bFCefb5103408542#code`.
-- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0xea073eA6a5BaC1142c7AB8155CcC6E696947d69F#code`.
-- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0x0D4194926945d73928eed2F3DcbeF3A324102F85#code`.
+- Factory source is verified on BscScan: `https://bscscan.com/address/0x383C58005B01e16E36CA0AB99cAC3a6994c4c2d8#code`.
+- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0x0CfA656104eB66558AFf232fD0e2dAc1Fd8543db#code`.
+- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0x92369eeF9D2D0F7a96B0B41533ABAb2Eb8C07745#code`.
 - Audit Registry source is verified on BscScan: `https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code`.
 
 ## Test Coverage

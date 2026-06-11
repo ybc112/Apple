@@ -1880,10 +1880,29 @@ function ProjectCard({
   const progress = Math.min(100, Math.max(0, project.progress))
   const mintExpired = project.refundDeadline > 0 && Date.now() >= project.refundDeadline * 1000
   const mintOpen = !project.finalized && progress < 100 && !mintExpired
+  const mintQuantityValue = Number(mintQuantity)
+  const whitelistTotal = Number(project.whitelistMintCount)
+  const whitelistMinted = Number(project.whitelistMintedCount)
+  const whitelistSlotsRemaining = Math.max(0, whitelistTotal - whitelistMinted)
+  const userWhitelistRemaining = Number(project.whitelistRemaining || '0')
+  const whitelistPhaseActive = project.whitelistEnabled && whitelistTotal > 0 && whitelistSlotsRemaining > 0
+  const phaseAllowsMint =
+    !wallet.account ||
+    !whitelistPhaseActive ||
+    (userWhitelistRemaining > 0 &&
+      (mintQuantityValue <= userWhitelistRemaining || userWhitelistRemaining >= whitelistSlotsRemaining))
+  const mintActionOpen = mintOpen && phaseAllowsMint
   const mintCostWei = getMintCostWei(project, mintQuantity)
   const mintNeedsApproval =
     project.paymentToken.toLowerCase() !== '0x0000000000000000000000000000000000000000' &&
     BigInt(project.mintPaymentAllowance || '0') < mintCostWei
+  const mintButtonText = mintPending
+    ? text.projects.whitelistPending
+    : !mintOpen
+      ? text.projects.mintClosed
+      : !phaseAllowsMint
+        ? language === 'zh' ? '公开未开放' : 'Public locked'
+        : mintNeedsApproval ? text.projects.approveMint : text.projects.mint
   const status = project.finalized
     ? text.projects.statusTrading
     : progress >= 100
@@ -1962,7 +1981,7 @@ function ProjectCard({
           className="mint-panel"
           onSubmit={async (event) => {
             event.preventDefault()
-            if (!mintOpen || mintPending) {
+            if (!mintActionOpen || mintPending) {
               return
             }
             setMintPending(true)
@@ -1989,13 +2008,12 @@ function ProjectCard({
           {project.whitelistEnabled && wallet.account && (
             <em>{text.projects.whitelistRemaining(project.whitelistRemaining)}</em>
           )}
-          <button className="submit-button" type="submit" disabled={!mintOpen || mintPending}>
+          {whitelistPhaseActive && wallet.account && !phaseAllowsMint && (
+            <em>{language === 'zh' ? '白名单阶段，公开会在白名单打满后开放' : 'Whitelist phase is active. Public mint opens after whitelist fills.'}</em>
+          )}
+          <button className="submit-button" type="submit" disabled={!mintActionOpen || mintPending}>
             <Rocket size={16} />
-            {mintPending
-              ? text.projects.whitelistPending
-              : mintOpen
-                ? mintNeedsApproval ? text.projects.approveMint : text.projects.mint
-                : text.projects.mintClosed}
+            {mintButtonText}
           </button>
         </form>
       )}

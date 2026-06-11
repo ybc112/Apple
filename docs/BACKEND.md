@@ -21,7 +21,7 @@ Required environment:
 ```bash
 BSC_RPC_URL=https://bsc.publicnode.com
 BSCSCAN_API_KEY=your_bscscan_key
-FACTORY_ADDRESS=0x4d966290C9482322a3829919bFCefb5103408542
+FACTORY_ADDRESS=0x383C58005B01e16E36CA0AB99cAC3a6994c4c2d8
 APPLE_BACKEND_PORT=8787
 AUTO_VERIFY_PROJECTS=true
 ```
@@ -46,4 +46,4 @@ The salt only stays valid for the exact launch parameters, creator wallet, Facto
 
 ## Whitelist and public mint order
 
-The current Vault consumes whitelist quota first when the minter has whitelist allowance. Any remaining requested quantity then uses public quota. If the public quota is full and the wallet has no remaining whitelist allowance, mint reverts.
+The current Vault keeps public mint closed while whitelist quota remains. A whitelisted minter consumes whitelist quota first; if that same transaction fills the final whitelist slot, any remaining requested quantity can use public quota. After whitelist quota is fully minted, public mint opens for everyone.

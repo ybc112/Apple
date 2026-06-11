@@ -432,22 +432,23 @@ describe("AppleLaunchFactory", function () {
     expect(await vault.publicMintLimit()).to.equal(3n);
     expect(await vault.owner()).to.equal(creator.address);
 
-    await vault.connect(buyer).mint(3n, { value: params.mintPrice * 3n });
-    expect(await vault.publicMintedCount()).to.equal(3n);
-
-    let publicSoldOut = false;
+    let publicBeforeWhitelistBlocked = false;
     try {
       await vault.connect(buyer).mint(1n, { value: params.mintPrice });
     } catch {
-      publicSoldOut = true;
+      publicBeforeWhitelistBlocked = true;
     }
 
-    expect(publicSoldOut).to.equal(true);
+    expect(publicBeforeWhitelistBlocked).to.equal(true);
 
     await vault.connect(creator).setWhitelistAllowance(buyer.address, 2n);
     await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
 
     expect(await vault.whitelistMintedCount()).to.equal(2n);
+    expect(await vault.publicMintedCount()).to.equal(0n);
+
+    await vault.connect(buyer).mint(3n, { value: params.mintPrice * 3n });
+    expect(await vault.publicMintedCount()).to.equal(3n);
     expect(await vault.mintedCount()).to.equal(5n);
   });
 

@@ -164,6 +164,7 @@ const messages = {
     invalidRefundAmount: '退款代币数量无效。',
     invalidMintQuantity: 'Mint 数量必须是大于 0 的整数。',
     invalidPaymentToken: '付款代币地址无效。',
+    mintEstimateFailed: '当前无法预估 Mint Gas。请确认白名单额度、公开阶段是否已开放、钱包余额是否足够，并刷新页面后重试。',
   },
   en: {
     factoryMissing: 'Launch Factory is not configured. Deploy the Factory and set VITE_LAUNCHPAD_FACTORY_ADDRESS first.',
@@ -193,6 +194,7 @@ const messages = {
     invalidRefundAmount: 'Refund token amount is invalid.',
     invalidMintQuantity: 'Mint quantity must be an integer greater than 0.',
     invalidPaymentToken: 'Payment token address is invalid.',
+    mintEstimateFailed: 'Unable to estimate mint gas. Check whitelist allowance, public phase status, wallet balance, then refresh and try again.',
   },
 } as const
 
@@ -536,14 +538,30 @@ export async function mintLaunchProject(
   const cost = BigInt(project.mintPriceWei || '0') * mintQuantity
   const iface = new Interface(mintVaultWriteAbi)
   const data = iface.encodeFunctionData('mint', [mintQuantity])
+  const tx = {
+    from,
+    to: project.vault,
+    value: project.paymentToken.toLowerCase() === ZeroAddress ? toBeHex(cost) : '0x0',
+    data,
+  }
+  let gas: string | undefined
+
+  try {
+    const estimatedGas = BigInt(String(await provider.request({
+      method: 'eth_estimateGas',
+      params: [tx],
+    })))
+    gas = toBeHex((estimatedGas * 120n) / 100n)
+  } catch {
+    throw new Error(text.mintEstimateFailed)
+  }
+
   const hash = (await provider.request({
     method: 'eth_sendTransaction',
     params: [
       {
-        from,
-        to: project.vault,
-        value: project.paymentToken.toLowerCase() === ZeroAddress ? toBeHex(cost) : '0x0',
-        data,
+        ...tx,
+        ...(gas ? { gas } : {}),
       },
     ],
   })) as string
