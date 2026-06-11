@@ -2075,7 +2075,9 @@ function ProjectCard({
             setWhitelistSaving(true)
             setWhitelistError('')
             try {
-              await submitWhitelistAllowances(project, parseWhitelistBatch(whitelistBatch, whitelistAllowance, language))
+              const entries = parseWhitelistBatch(whitelistBatch, whitelistAllowance, language)
+              validateWhitelistBatchAgainstProject(project, entries, language)
+              await submitWhitelistAllowances(project, entries)
               setWhitelistBatch('')
             } catch (error) {
               setWhitelistError(readProviderErrorMessage(error))
@@ -3470,6 +3472,23 @@ function parseWhitelistBatch(
     account,
     allowance: normalizedAllowance,
   }))
+}
+
+function validateWhitelistBatchAgainstProject(
+  project: LaunchProject,
+  entries: WhitelistAllowanceEntry[],
+  language: Language,
+) {
+  const whitelistLimit = BigInt(project.whitelistMintCount || '0')
+  const requestedAllowance = entries.reduce((total, entry) => total + BigInt(entry.allowance), 0n)
+
+  if (whitelistLimit > 0n && requestedAllowance > whitelistLimit) {
+    throw new Error(
+      language === 'zh'
+        ? `白名单总额度不能超过 ${whitelistLimit.toString()} 份。`
+        : `Whitelist allowance cannot exceed ${whitelistLimit.toString()} slots.`,
+    )
+  }
 }
 
 function getMintCostWei(project: LaunchProject, quantity: string) {

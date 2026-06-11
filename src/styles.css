@@ -913,21 +913,30 @@ a {
   justify-content: center;
   gap: 8px;
   min-height: 42px;
-  border: 1px solid rgba(104, 164, 154, 0.24);
+  border: 1px solid rgba(149, 238, 211, 0.42);
   border-radius: var(--radius);
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
+  color: #dffff3;
+  background:
+    linear-gradient(180deg, rgba(150, 255, 222, 0.15), rgba(122, 210, 190, 0.08)),
+    rgba(255, 255, 255, 0.08);
   font-weight: 900;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 24px rgba(0, 0, 0, 0.18);
   transition:
     border-color 160ms var(--ease-out),
     background-color 160ms var(--ease-out),
-    color 160ms var(--ease-out);
+    color 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
 }
 
 .project-card button:hover {
-  border-color: rgba(141, 247, 196, 0.5);
-  color: var(--accent);
-  background: rgba(141, 247, 196, 0.08);
+  border-color: rgba(177, 255, 229, 0.72);
+  color: #ffffff;
+  background:
+    linear-gradient(180deg, rgba(155, 255, 224, 0.24), rgba(122, 210, 190, 0.12)),
+    rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
 }
 
 .mint-panel {
@@ -984,15 +993,15 @@ a {
 }
 
 .mint-panel .submit-button {
-  min-height: 48px;
+  min-height: 52px;
   color: #03100b;
   border-color: rgba(161, 255, 215, 0.78);
   background:
-    linear-gradient(135deg, #b7ffe0 0%, #6dffc5 46%, #c5dcff 100%);
+    linear-gradient(135deg, #edfff7 0%, #75ffd0 42%, #f0c9ff 100%);
   box-shadow:
-    0 16px 34px rgba(109, 255, 197, 0.24),
+    0 18px 42px rgba(109, 255, 197, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  font-size: 18px;
+  font-size: 20px;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 

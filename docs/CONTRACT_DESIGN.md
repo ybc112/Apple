@@ -77,6 +77,7 @@ Whitelist mode is controlled per project vault.
 
 - `setWhitelistAllowances(address[] accounts, uint256[] allowances)`
   - Vault owner batch-sets whitelist allowances.
+  - The sum of all configured whitelist allowances cannot exceed `whitelistMintLimit`.
 
 - `whitelistRemaining(address account)`
   - Returns how many mint slots the wallet still has.
@@ -102,6 +103,7 @@ Only the vault owner can update whitelist allowances. The factory sets the vault
 
 - `refundDeadline` is set to `block.timestamp + 24 hours` when the vault is deployed.
 - `mint()` is available only before `refundDeadline` and only while the launch is not finalized.
+- Buyers must call `mint(uint256)`; direct BNB transfers to the vault are rejected and cannot mint.
 - For BNB launches, each mint calls Pancake V2 `addLiquidityETH` with that mint's BNB and matching reserve tokens.
 - When the final mint slot is filled, the vault sends remaining LP to the black-hole address and calls `AppleToken.finalizeLaunch(pair)`.
 - `AppleToken.finalizeLaunch()` can only be called by the assigned vault.
@@ -188,18 +190,18 @@ The current UI only offers BNB and USDT for mint payments. USD1 was removed from
 ## BNB Chain Deployment
 
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
-- Factory: `0x383C58005B01e16E36CA0AB99cAC3a6994c4c2d8`.
-- Token Deployer: `0x0CfA656104eB66558AFf232fD0e2dAc1Fd8543db`.
-- Vault Deployer: `0x92369eeF9D2D0F7a96B0B41533ABAb2Eb8C07745`.
+- Factory: `0x9C0C827b3E4a386939E5F3221c2A13c65f808278`.
+- Token Deployer: `0xf10445603aAEEDF5aEa579e6059C65796A23E3CA`.
+- Vault Deployer: `0xec5095945F9466aF35303b1726465E1dc0AE1466`.
 - Pancake V2 Router: `0x10ED43C718714eb63d5aA57B78B54704E256024E`.
 - Audit Registry: `0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084`.
-- Factory deployment transaction: `0x060a693589bb456ff4c9434a3e46bb23d451daabffb4e113d008cae94ca1bb4e`.
+- Factory deployment transaction: `0x5d93da00386a414b3fcc765513111441084a1314c6d2c0d65fb404c14cef6f1e`.
 - Audit Registry deployment transaction: `0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a`.
 - Fee recipient: configured by environment variable during deployment.
 - Creation fee: `0.005 BNB`.
-- Factory source is verified on BscScan: `https://bscscan.com/address/0x383C58005B01e16E36CA0AB99cAC3a6994c4c2d8#code`.
-- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0x0CfA656104eB66558AFf232fD0e2dAc1Fd8543db#code`.
-- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0x92369eeF9D2D0F7a96B0B41533ABAb2Eb8C07745#code`.
+- Factory source is verified on BscScan: `https://bscscan.com/address/0x9C0C827b3E4a386939E5F3221c2A13c65f808278#code`.
+- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0xf10445603aAEEDF5aEa579e6059C65796A23E3CA#code`.
+- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0xec5095945F9466aF35303b1726465E1dc0AE1466#code`.
 - Audit Registry source is verified on BscScan: `https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code`.
 
 ## Test Coverage

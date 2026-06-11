@@ -360,7 +360,7 @@ describe("AppleLaunchFactory", function () {
   });
 
   it("enforces whitelist minting when whitelist mode is enabled", async function () {
-    const { creator, buyer, creationFee, factory } = await deployFactory();
+    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
     const params = {
       ...launchParams(creator.address),
       mintCount: 2n,
@@ -396,6 +396,15 @@ describe("AppleLaunchFactory", function () {
     expect(nonOwnerBlocked).to.equal(true);
 
     await vault.connect(creator).setWhitelistAllowance(buyer.address, 2n);
+
+    let quotaBlocked = false;
+    try {
+      await vault.connect(creator).setWhitelistAllowance(dividendReceiver.address, 1n);
+    } catch {
+      quotaBlocked = true;
+    }
+    expect(quotaBlocked).to.equal(true);
+
     await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
 
     expect(await vault.whitelistRemaining(buyer.address)).to.equal(0n);
@@ -450,6 +459,30 @@ describe("AppleLaunchFactory", function () {
     await vault.connect(buyer).mint(3n, { value: params.mintPrice * 3n });
     expect(await vault.publicMintedCount()).to.equal(3n);
     expect(await vault.mintedCount()).to.equal(5n);
+  });
+
+  it("rejects direct BNB transfers to the vault outside mint", async function () {
+    const { creator, buyer, creationFee, factory } = await deployFactory();
+    const params = launchParams(creator.address);
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-direct-transfer"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+
+    let directTransferBlocked = false;
+    try {
+      await buyer.sendTransaction({
+        to: project.vault,
+        value: params.mintPrice,
+      });
+    } catch {
+      directTransferBlocked = true;
+    }
+
+    expect(directTransferBlocked).to.equal(true);
   });
 
   it("routes sell tax to platform, marketing, dividend, LP black hole, and burn", async function () {

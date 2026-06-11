@@ -68,6 +68,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     uint256 public liquidityAddedToken;
     uint256 public liquidityAddedNative;
     uint256 public liquidityLpAmount;
+    uint256 public totalWhitelistAllowance;
     uint256 public immutable refundDeadline;
     address public liquidityPair;
     bool public finalized;
@@ -89,6 +90,8 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     error ZeroAddress();
     error NotWhitelisted();
     error LengthMismatch();
+    error WhitelistQuotaExceeded();
+    error DirectNativePayment();
 
     event Minted(
         address indexed minter,
@@ -284,7 +287,18 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
             revert ZeroAddress();
         }
 
+        _setWhitelistAllowance(account, allowance);
+    }
+
+    function _setWhitelistAllowance(address account, uint256 allowance) private {
+        uint256 previousAllowance = whitelistAllowance[account];
+        uint256 nextTotalAllowance = totalWhitelistAllowance - previousAllowance + allowance;
+        if (nextTotalAllowance > whitelistMintLimit) {
+            revert WhitelistQuotaExceeded();
+        }
+
         whitelistAllowance[account] = allowance;
+        totalWhitelistAllowance = nextTotalAllowance;
         emit WhitelistAllowanceUpdated(account, allowance);
     }
 
@@ -304,8 +318,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
                 revert ZeroAddress();
             }
 
-            whitelistAllowance[accounts[i]] = allowances[i];
-            emit WhitelistAllowanceUpdated(accounts[i], allowances[i]);
+            _setWhitelistAllowance(accounts[i], allowances[i]);
         }
     }
 
@@ -518,5 +531,9 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
     }
 
-    receive() external payable {}
+    receive() external payable {
+        if (msg.sender != address(liquidityRouter) && msg.sender != liquidityPair) {
+            revert DirectNativePayment();
+        }
+    }
 }
