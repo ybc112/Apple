@@ -38,6 +38,19 @@ VITE_APP_BACKEND_URL=https://your-backend.example
 VITE_VANITY_SUFFIX=5555
 ```
 
+For a Netlify frontend proxy, use:
+
+```bash
+VITE_APP_BACKEND_URL=same-origin
+```
+
+Then add `public/_redirects`:
+
+```txt
+/api/*  http://154.12.118.163:8787/api/:splat  200
+/health  http://154.12.118.163:8787/health  200
+```
+
 When `VITE_APP_BACKEND_URL` is configured, the launch page asks the backend for a CREATE2 salt before sending the wallet transaction. After the transaction confirms, the frontend parses the `LaunchCreated` event and queues the new project for source-code verification through the backend.
 
 If the backend is unavailable, the frontend falls back to a random salt so token creation still works. Auto-verification can still happen later through the backend monitor.

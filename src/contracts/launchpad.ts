@@ -1020,7 +1020,12 @@ function getPaymentSymbol(paymentToken: string) {
 }
 
 function normalizeBackendBaseUrl(value: string) {
-  return value.trim().replace(/\/+$/, '')
+  const nextValue = value.trim()
+  if (nextValue === 'same-origin' && globalThis.location?.origin) {
+    return globalThis.location.origin
+  }
+
+  return nextValue.replace(/\/+$/, '')
 }
 
 function buildBackendUrl(path: string) {
