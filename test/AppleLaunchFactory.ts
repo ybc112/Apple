@@ -29,12 +29,12 @@ describe("AppleLaunchFactory", function () {
     return { owner, creator, buyer, pair, dividendReceiver, creationFee, factory, router };
   }
 
-  async function getLiquidityPair(router: any, tokenAddress: string) {
+  async function getLiquidityPair(router: any, tokenAddress: string, pairedAsset?: string) {
     const pancakeFactory = await ethers.getContractAt(
       "MockPancakeFactory",
       await router.factory(),
     );
-    return pancakeFactory.getPair(tokenAddress, await router.WETH());
+    return pancakeFactory.getPair(tokenAddress, pairedAsset ?? await router.WETH());
   }
 
   function launchParams(receiver: string) {
@@ -45,6 +45,7 @@ describe("AppleLaunchFactory", function () {
       totalSupply: ethers.parseUnits("1000000", 18),
       mintCount: 1000n,
       mintPrice: ethers.parseEther("0.001"),
+      maxMintPerWallet: 0n,
       paymentToken: ethersLib.ZeroAddress,
       rewardToken: ethersLib.ZeroAddress,
       rewardThreshold: 0n,
@@ -128,6 +129,54 @@ describe("AppleLaunchFactory", function () {
     expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
     expect(await ethers.provider.getBalance(pairAddress)).to.equal(params.mintPrice * 2n);
     expect(await vault.finalized()).to.equal(false);
+  });
+
+  it("rejects USDT mint launches while token/payment-token liquidity is disabled", async function () {
+    const { creator, creationFee, factory } = await deployFactory();
+    const usdt = await ethers.deployContract("MockRewardToken");
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 3n,
+      mintPrice: ethers.parseUnits("1", 18),
+      paymentToken: await usdt.getAddress(),
+      rewardToken: await usdt.getAddress(),
+    };
+
+    let blocked = false;
+    try {
+      await factory
+        .connect(creator)
+        .createLaunch(params, ethers.id("salt-usdt-disabled"), { value: creationFee });
+    } catch {
+      blocked = true;
+    }
+    expect(blocked).to.equal(true);
+  });
+
+  it("enforces the configured per-wallet mint limit", async function () {
+    const { creator, buyer, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 5n,
+      maxMintPerWallet: 2n,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-wallet-limit"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
+    let limitBlocked = false;
+    try {
+      await vault.connect(buyer).mint(1n, { value: params.mintPrice });
+    } catch {
+      limitBlocked = true;
+    }
+    expect(limitBlocked).to.equal(true);
   });
 
   it("refunds buyers after 24 hours when the launch is not sold out", async function () {
@@ -434,13 +483,8 @@ describe("AppleLaunchFactory", function () {
     await vault.connect(creator).setWhitelistAllowance(dividendReceiver.address, 1n);
     expect(await vault.whitelistAccountCount()).to.equal(2n);
 
-    let quotaBlocked = false;
-    try {
-      await vault.connect(creator).setWhitelistAllowance(pair.address, 1n);
-    } catch {
-      quotaBlocked = true;
-    }
-    expect(quotaBlocked).to.equal(true);
+    await vault.connect(creator).setWhitelistAllowance(pair.address, 1n);
+    expect(await vault.whitelistAccountCount()).to.equal(3n);
 
     await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
 
@@ -455,6 +499,75 @@ describe("AppleLaunchFactory", function () {
     }
 
     expect(overLimit).to.equal(true);
+  });
+
+  it("allows more whitelist addresses than reserved whitelist mint slots", async function () {
+    const { creator, buyer, pair, dividendReceiver, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 3n,
+      whitelistMintCount: 1n,
+      whitelistEnabled: true,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-whitelist-overbook"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await vault.connect(creator).setWhitelistAccounts(
+      [buyer.address, pair.address, dividendReceiver.address],
+      true,
+    );
+
+    expect(await vault.whitelistAccountCount()).to.equal(3n);
+    expect(await vault.totalWhitelistAllowance()).to.equal(3n);
+    await vault.connect(buyer).mint(1n, { value: params.mintPrice });
+    expect(await vault.whitelistMintedCount()).to.equal(1n);
+
+    await vault.connect(pair).mint(2n, { value: params.mintPrice * 2n });
+    expect(await vault.publicMintedCount()).to.equal(2n);
+    expect(await vault.mintedCount()).to.equal(3n);
+  });
+
+  it("releases unused whitelist slots to public minting when whitelist mode is disabled", async function () {
+    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 5n,
+      whitelistMintCount: 3n,
+      whitelistEnabled: true,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-whitelist-disable"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await vault.connect(creator).setWhitelistAllowance(buyer.address, 1n);
+    await vault.connect(buyer).mint(1n, { value: params.mintPrice });
+
+    let publicBlocked = false;
+    try {
+      await vault.connect(dividendReceiver).mint(1n, { value: params.mintPrice });
+    } catch {
+      publicBlocked = true;
+    }
+    expect(publicBlocked).to.equal(true);
+
+    await vault.connect(creator).setWhitelistEnabled(false);
+    await vault.connect(dividendReceiver).mint(4n, { value: params.mintPrice * 4n });
+
+    expect(await vault.whitelistMintedCount()).to.equal(1n);
+    expect(await vault.publicMintedCount()).to.equal(4n);
+    expect(await vault.mintedCount()).to.equal(5n);
+    expect(await vault.finalized()).to.equal(true);
   });
 
   it("separates public mint quota from whitelist mint quota", async function () {
@@ -600,6 +713,54 @@ describe("AppleLaunchFactory", function () {
       await token.connect(buyer).claimDividend();
       expect(await rewardToken.balanceOf(buyer.address)).to.equal(dividendAmount);
     }
+  });
+
+  it("does not block sells when swapback reward routing fails", async function () {
+    const { owner, creator, buyer, dividendReceiver, creationFee, factory, router } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+      rewardToken: dividendReceiver.address,
+      fundFeeBps: 0,
+      lpFeeBps: 0,
+      dividendFeeBps: 10000,
+      burnFeeBps: 0,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-swapback-fail-open"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await owner.sendTransaction({
+      to: await router.getAddress(),
+      value: ethers.parseEther("100"),
+    });
+    await token.connect(creator).setSwapSettings(true, 1n);
+    await token.connect(creator).setDistributorGas(0n);
+    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
+
+    const pairAddress = await getLiquidityPair(router, tokenAddress);
+    const transferAmount = ethers.parseUnits("1", 18);
+    const fee = (transferAmount * BigInt(params.sellTaxBps)) / 10000n;
+    const pairTokenBefore = await token.balanceOf(pairAddress);
+
+    await token.connect(buyer).approve(await router.getAddress(), transferAmount);
+    await router.connect(buyer).swapExactTokensForETHSupportingFeeOnTransferTokens(
+      transferAmount,
+      0,
+      [tokenAddress, await router.WETH()],
+      buyer.address,
+      0,
+    );
+
+    expect((await token.balanceOf(pairAddress)) - pairTokenBefore).to.equal(transferAmount - fee);
+    expect(await token.balanceOf(await token.getAddress())).to.equal(fee);
+    expect((await token.tokensForPlatform()) + (await token.tokensForDividends())).to.equal(fee);
   });
 
   it("lets BscScan-style token mint buttons forward the real minter to the vault", async function () {

@@ -6,6 +6,7 @@ This backend keeps secret operational logic out of the browser.
 
 - Watches the configured Factory for new projects.
 - Queues BscScan verification for each new project Token and Vault.
+- Retries verification if BscScan has not indexed the new contracts yet.
 - Exposes a vanity salt API for fixed token address suffixes such as `aaaa`.
 
 ## Run
@@ -21,9 +22,12 @@ Required environment:
 ```bash
 BSC_RPC_URL=https://bsc.publicnode.com
 BSCSCAN_API_KEY=your_bscscan_key
-APPLE_FACTORY_ADDRESS=0xB3869F838dBC8D9886653FC1d77f49d88B0B273D
+APPLE_FACTORY_ADDRESS=0x1aaB224fDb05bAC96d49557c8928e21Fc5Cbb28a
 APPLE_BACKEND_PORT=8787
 AUTO_VERIFY_PROJECTS=true
+VERIFY_INITIAL_DELAY_MS=20000
+VERIFY_RETRY_DELAY_MS=60000
+VERIFY_RETRY_LIMIT=5
 APPLE_CORS_ORIGIN=https://your-frontend.example
 APPLE_VERIFY_RATE_LIMIT=30
 APPLE_VANITY_RATE_LIMIT=6
@@ -53,7 +57,7 @@ Then add `public/_redirects`:
 
 When `VITE_APP_BACKEND_URL` is configured, the launch page asks the backend for a CREATE2 salt before sending the wallet transaction. The frontend checks that the backend is using the same chain id and Factory address before it accepts the returned vanity salt. After the transaction confirms, the frontend parses the `LaunchCreated` event and queues the new project for source-code verification through the backend.
 
-If a vanity suffix is configured but the backend is unavailable, blocked by the browser, or points to a different Factory, the frontend falls back to a random salt so token creation can still continue. In that fallback path the token may not have the requested vanity suffix.
+If a vanity suffix is configured but the backend is unavailable, blocked by the browser, points to a different Factory, or cannot return a matching suffix, the frontend stops the launch before the wallet transaction. It does not fall back to a random salt when `VITE_VANITY_SUFFIX=aaaa` is enabled.
 
 ## Verify a project manually
 
@@ -73,4 +77,4 @@ The salt only stays valid for the exact launch parameters, creator wallet, Facto
 
 ## Whitelist and public mint order
 
-The current Vault keeps public mint closed while whitelist quota remains. A whitelisted minter consumes whitelist quota first; if that same transaction fills the final whitelist slot, any remaining requested quantity can use public quota. After whitelist quota is fully minted, public mint opens for everyone.
+The current Vault keeps public mint closed while whitelist quota remains. A whitelisted minter consumes whitelist quota first; if that same transaction fills the final whitelist slot, any remaining requested quantity can use public quota. The whitelist address list can contain more wallets than reserved whitelist mint slots. After whitelist quota is fully minted, public mint opens for everyone; if the owner disables whitelist mode, unused whitelist slots are released to public minting.

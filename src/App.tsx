@@ -329,6 +329,7 @@ const copy = {
       mintCount: '总铸造次数',
       publicMintCount: '公开份数',
       whitelistMintCount: '白名单份数',
+      maxMintPerWallet: '单钱包最多 Mint',
       mintPrice: '单次价格',
       whitelistTitle: '开启白名单 Mint',
       whitelistDesc: '开启后，只有项目方加入白名单列表的钱包可以 mint。',
@@ -623,6 +624,7 @@ const copy = {
       mintCount: 'Mint count',
       publicMintCount: 'Public count',
       whitelistMintCount: 'Whitelist count',
+      maxMintPerWallet: 'Max mint per wallet',
       mintPrice: 'Price per mint',
       whitelistTitle: 'Enable whitelist mint',
       whitelistDesc: 'When enabled, only wallets listed by the project owner in the Vault can mint.',
@@ -3042,6 +3044,12 @@ function LaunchPage({
                   setWhitelistEnabled(Number(value) > 0)
                 }}
               />
+              <InputField
+                label={text.launch.maxMintPerWallet}
+                placeholder={language === 'zh' ? '0 表示不限制' : '0 for unlimited'}
+                value={form.maxMintPerWallet}
+                onChange={(value) => updateForm('maxMintPerWallet', value)}
+              />
               <InputField label={text.launch.mintPrice} value={form.mintPrice} onChange={(value) => updateForm('mintPrice', value)} />
             </div>
             <div className="quota-summary">
@@ -3256,6 +3264,10 @@ function LaunchPage({
               <div>
                 <dt>{text.launch.mintQuota}</dt>
                 <dd>{totalMintCount.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>{text.launch.maxMintPerWallet}</dt>
+                <dd>{Number(form.maxMintPerWallet || 0) > 0 ? form.maxMintPerWallet : language === 'zh' ? '不限制' : 'Unlimited'}</dd>
               </div>
               <div>
                 <dt>{text.launch.whitelist}</dt>

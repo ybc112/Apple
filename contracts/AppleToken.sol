@@ -699,6 +699,10 @@ contract AppleToken is ERC20, Ownable {
         emit AutomatedMarketMakerPairUpdated(pair, enabled);
     }
 
+    function processTaxTokens() external {
+        _swapBackIfNeeded();
+    }
+
     function _setTaxes(TaxConfig memory taxConfig) private {
         if (taxConfig.buyTaxBps > MAX_TAX_BPS || taxConfig.sellTaxBps > MAX_TAX_BPS) {
             revert InvalidTax();
@@ -842,7 +846,8 @@ contract AppleToken is ERC20, Ownable {
         }
 
         if (to == liquidityPair) {
-            _swapBackIfNeeded();
+            try this.processTaxTokens() {}
+            catch {}
         }
 
         uint256 netAmount = value - fee;

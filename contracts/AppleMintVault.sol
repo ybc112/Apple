@@ -56,6 +56,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     uint256 public immutable whitelistMintLimit;
     uint256 public immutable publicMintLimit;
     uint256 public immutable mintPrice;
+    uint256 public immutable maxMintPerWallet;
     uint256 public immutable tokensPerMint;
     uint256 public immutable tokensForSale;
     uint256 public immutable liquidityTokenReserve;
@@ -90,9 +91,9 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     error ZeroAddress();
     error NotWhitelisted();
     error LengthMismatch();
-    error WhitelistListFull();
     error DirectNativePayment();
     error NotLaunchToken();
+    error WalletMintLimitExceeded();
 
     event Minted(
         address indexed minter,
@@ -123,6 +124,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         uint256 totalSupply_,
         uint256 totalMints_,
         uint256 mintPrice_,
+        uint256 maxMintPerWallet_,
         uint256 whitelistMintLimit_,
         bool whitelistEnabled_
     )
@@ -137,10 +139,11 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         if (whitelistMintLimit_ > totalMints_) {
             revert InvalidQuantity();
         }
+        if (paymentToken_ != address(0)) {
+            revert IncorrectPayment();
+        }
 
-        uint256 reserve = paymentToken_ == address(0)
-            ? (totalSupply_ * LIQUIDITY_TOKEN_BPS) / BPS_DENOMINATOR
-            : 0;
+        uint256 reserve = (totalSupply_ * LIQUIDITY_TOKEN_BPS) / BPS_DENOMINATOR;
         uint256 saleSupply = totalSupply_ - reserve;
         uint256 perMint = saleSupply / totalMints_;
         if (perMint == 0) {
@@ -155,6 +158,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         whitelistMintLimit = whitelistMintLimit_;
         publicMintLimit = totalMints_ - whitelistMintLimit_;
         mintPrice = mintPrice_;
+        maxMintPerWallet = maxMintPerWallet_;
         tokensPerMint = perMint;
         tokensForSale = saleSupply;
         liquidityTokenReserve = reserve;
@@ -190,6 +194,12 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         if (mintedCount + quantity > totalMints) {
             revert MintSoldOut();
         }
+        if (
+            maxMintPerWallet > 0
+                && mintedByWallet[minter] + quantity > maxMintPerWallet
+        ) {
+            revert WalletMintLimitExceeded();
+        }
 
         uint256 cost = quote(quantity);
         (uint256 whitelistQuantity, uint256 publicQuantity) = _consumeMintQuota(minter, quantity);
@@ -200,22 +210,13 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
         distributedTokenAmount += tokenAmount;
 
-        if (paymentToken == address(0)) {
-            if (msg.value != cost) {
-                revert IncorrectPayment();
-            }
-        } else {
-            if (msg.value != 0) {
-                revert IncorrectPayment();
-            }
-            IERC20(paymentToken).safeTransferFrom(minter, address(this), cost);
+        if (msg.value != cost) {
+            revert IncorrectPayment();
         }
 
         paidByWallet[minter] += cost;
         IERC20(address(token)).safeTransfer(minter, tokenAmount);
-        if (paymentToken == address(0)) {
-            _addMintLiquidity(minter, quantity, cost);
-        }
+        _addMintLiquidity(minter, quantity, cost);
         emit Minted(minter, quantity, whitelistQuantity, publicQuantity, tokenAmount, cost);
 
         if (mintedCount == totalMints) {
@@ -273,22 +274,17 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
 
         IERC20(address(token)).safeTransferFrom(msg.sender, address(this), tokenAmount);
 
-        if (paymentToken == address(0)) {
-            _removeWalletLiquidity(msg.sender);
-            uint256 refundAmount = paid < address(this).balance ? paid : address(this).balance;
-            if (refundAmount == 0) {
-                revert NoRefund();
-            }
-
-            (bool sent,) = payable(msg.sender).call{ value: refundAmount }("");
-            if (!sent) {
-                revert IncorrectPayment();
-            }
-            refundedPayment += refundAmount;
-        } else {
-            IERC20(paymentToken).safeTransfer(msg.sender, paid);
-            refundedPayment += paid;
+        _removeWalletLiquidity(msg.sender);
+        uint256 refundAmount = paid < address(this).balance ? paid : address(this).balance;
+        if (refundAmount == 0) {
+            revert NoRefund();
         }
+
+        (bool sent,) = payable(msg.sender).call{ value: refundAmount }("");
+        if (!sent) {
+            revert IncorrectPayment();
+        }
+        refundedPayment += refundAmount;
 
         emit Refunded(msg.sender, quantity, tokenAmount, paid);
     }
@@ -367,9 +363,6 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
 
         if (listed) {
-            if (whitelistAccountCount + 1 > whitelistMintLimit) {
-                revert WhitelistListFull();
-            }
             whitelistAccountCount += 1;
         } else {
             whitelistAccountCount -= 1;
@@ -399,16 +392,6 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
     }
 
-    function withdrawPaymentToken(uint256 amount) external onlyOwner {
-        if (!finalized) {
-            revert RefundUnavailable();
-        }
-        if (paymentToken == address(0)) {
-            revert ZeroAddress();
-        }
-        IERC20(paymentToken).safeTransfer(receiver, amount);
-    }
-
     function _consumeMintQuota(address minter, uint256 quantity)
         private
         returns (uint256 whitelistQuantity, uint256 publicQuantity)
@@ -432,7 +415,10 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
 
         publicQuantity = remainingQuantity;
-        if (publicMintedCount + publicQuantity > publicMintLimit) {
+        uint256 activePublicMintLimit = whitelistEnabled
+            ? publicMintLimit
+            : totalMints - whitelistMintedCount;
+        if (publicMintedCount + publicQuantity > activePublicMintLimit) {
             if (whitelistEnabled && whitelistQuantity == 0) {
                 revert NotWhitelisted();
             }
@@ -458,18 +444,9 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     function _finalizeLaunch() private {
         finalized = true;
 
-        uint256 paidOut;
-        if (paymentToken == address(0)) {
-            paidOut = liquidityAddedNative;
-            _lockLiquidity();
-            token.finalizeLaunch(liquidityPair);
-        } else {
-            token.finalizeLaunch(address(0));
-            paidOut = IERC20(paymentToken).balanceOf(address(this));
-            if (paidOut > 0) {
-                IERC20(paymentToken).safeTransfer(receiver, paidOut);
-            }
-        }
+        uint256 paidOut = liquidityAddedNative;
+        token.finalizeLaunch(liquidityPair);
+        _lockLiquidity();
 
         emit LaunchFinalized(paidOut);
         _transferOwnership(PERMISSION_BLACK_HOLE);
@@ -486,11 +463,14 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
 
         address routerFactory = liquidityRouter.factory();
-        address wrappedNative = liquidityRouter.WETH();
-        address pair = IPancakeV2Factory(routerFactory).getPair(address(token), wrappedNative);
+        address pairedAsset = liquidityRouter.WETH();
+        address pair = IPancakeV2Factory(routerFactory).getPair(address(token), pairedAsset);
 
         IERC20(address(token)).forceApprove(address(liquidityRouter), tokenAmount);
-        (uint256 amountToken, uint256 amountETH, uint256 liquidity) = liquidityRouter.addLiquidityETH{
+        uint256 amountToken;
+        uint256 amountPayment;
+        uint256 liquidity;
+        (amountToken, amountPayment, liquidity) = liquidityRouter.addLiquidityETH{
             value: nativeAmount
         }(
             address(token),
@@ -500,19 +480,19 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
             address(this),
             block.timestamp
         );
+        liquidityAddedNative += amountPayment;
         IERC20(address(token)).forceApprove(address(liquidityRouter), 0);
 
         if (pair == address(0)) {
-            pair = IPancakeV2Factory(routerFactory).getPair(address(token), wrappedNative);
+            pair = IPancakeV2Factory(routerFactory).getPair(address(token), pairedAsset);
         }
 
         liquidityPair = pair;
         liquidityAddedToken += amountToken;
-        liquidityAddedNative += amountETH;
         liquidityLpAmount += liquidity;
         liquidityLpByWallet[account] += liquidity;
 
-        emit LiquidityAdded(pair, amountToken, amountETH, liquidity);
+        emit LiquidityAdded(pair, amountToken, amountPayment, liquidity);
     }
 
     function _removeWalletLiquidity(address account) private {
@@ -523,9 +503,11 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
 
         liquidityLpByWallet[account] = 0;
 
+        IERC20(liquidityPair).forceApprove(address(liquidityRouter), liquidity);
+        uint256 tokenRecovered;
+        uint256 paymentRecovered;
         uint256 tokenBefore = IERC20(address(token)).balanceOf(address(this));
         uint256 nativeBefore = address(this).balance;
-        IERC20(liquidityPair).forceApprove(address(liquidityRouter), liquidity);
         liquidityRouter.removeLiquidityETHSupportingFeeOnTransferTokens(
             address(token),
             liquidity,
@@ -534,16 +516,16 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
             address(this),
             block.timestamp
         );
+        tokenRecovered = IERC20(address(token)).balanceOf(address(this)) - tokenBefore;
+        paymentRecovered = address(this).balance - nativeBefore;
+        liquidityAddedNative = liquidityAddedNative >= paymentRecovered
+            ? liquidityAddedNative - paymentRecovered
+            : 0;
         IERC20(liquidityPair).forceApprove(address(liquidityRouter), 0);
 
-        uint256 tokenRecovered = IERC20(address(token)).balanceOf(address(this)) - tokenBefore;
-        uint256 nativeRecovered = address(this).balance - nativeBefore;
         liquidityLpAmount = liquidityLpAmount >= liquidity ? liquidityLpAmount - liquidity : 0;
         liquidityAddedToken = liquidityAddedToken >= tokenRecovered
             ? liquidityAddedToken - tokenRecovered
-            : 0;
-        liquidityAddedNative = liquidityAddedNative >= nativeRecovered
-            ? liquidityAddedNative - nativeRecovered
             : 0;
     }
 

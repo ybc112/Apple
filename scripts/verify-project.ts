@@ -77,6 +77,7 @@ const vaultConstructorArgs = [
   project.totalSupply,
   project.mintCount,
   project.mintPrice,
+  project.maxMintPerWallet ?? 0,
   project.whitelistMintCount,
   project.whitelistEnabled,
 ];

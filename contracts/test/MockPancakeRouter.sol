@@ -42,6 +42,20 @@ contract MockPancakePair is ERC20 {
         this.sync(token0 == token ? token1 : token0);
     }
 
+    function burnLiquidityTokens(address tokenA, address tokenB, address to, uint256 liquidity)
+        external
+        returns (uint256 amountA, uint256 amountB)
+    {
+        uint256 supply = totalSupply();
+        amountA = (IERC20(tokenA).balanceOf(address(this)) * liquidity) / supply;
+        amountB = (IERC20(tokenB).balanceOf(address(this)) * liquidity) / supply;
+
+        _burn(address(this), liquidity);
+        IERC20(tokenA).transfer(to, amountA);
+        IERC20(tokenB).transfer(to, amountB);
+        this.sync(address(0));
+    }
+
     function _assetBalance(address asset, address wrappedNative) private view returns (uint256) {
         if (asset == wrappedNative) {
             return address(this).balance;
@@ -90,7 +104,8 @@ contract MockPancakeRouter {
     )
         external
     {
-        address pair = _factory.getPair(path[0], WETH);
+        address pairedAsset = path.length > 2 ? path[1] : WETH;
+        address pair = _factory.getPair(path[0], pairedAsset);
         if (pair == address(0)) {
             IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
         } else {
@@ -112,13 +127,13 @@ contract MockPancakeRouter {
     )
         external
     {
-        address pair = _factory.getPair(path[0], WETH);
+        address pair = _factory.getPair(path[0], path[1]);
         if (pair == address(0)) {
             IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
         } else {
             IERC20(path[0]).transferFrom(msg.sender, pair, amountIn);
             _assertPairInput(pair, path[0]);
-            MockPancakePair(payable(pair)).sync(WETH);
+            MockPancakePair(payable(pair)).sync(path[1]);
         }
 
         MockRewardToken(path[path.length - 1]).mint(to, amountIn);
@@ -151,6 +166,34 @@ contract MockPancakeRouter {
         MockPancakePair(payable(pair)).sync(WETH);
     }
 
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256,
+        uint256,
+        address to,
+        uint256
+    )
+        external
+        returns (uint256 amountA, uint256 amountB, uint256 liquidity)
+    {
+        address pair = _factory.getPair(tokenA, tokenB);
+        if (pair == address(0)) {
+            pair = _factory.createPair(tokenA, tokenB);
+        }
+
+        IERC20(tokenA).transferFrom(msg.sender, pair, amountADesired);
+        IERC20(tokenB).transferFrom(msg.sender, pair, amountBDesired);
+
+        amountA = amountADesired;
+        amountB = amountBDesired;
+        liquidity = amountBDesired > 0 ? amountBDesired : amountADesired;
+        MockPancakePair(payable(pair)).mint(to, liquidity);
+        MockPancakePair(payable(pair)).sync(address(0));
+    }
+
     function removeLiquidityETHSupportingFeeOnTransferTokens(
         address token,
         uint256 liquidity,
@@ -166,6 +209,25 @@ contract MockPancakeRouter {
         IERC20(pair).transferFrom(msg.sender, pair, liquidity);
         (, amountETH) = MockPancakePair(payable(pair)).burnLiquidity(token, to, liquidity);
         MockPancakePair(payable(pair)).sync(WETH);
+    }
+
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256,
+        uint256,
+        address to,
+        uint256
+    )
+        external
+        returns (uint256 amountA, uint256 amountB)
+    {
+        address pair = _factory.getPair(tokenA, tokenB);
+        IERC20(pair).transferFrom(msg.sender, pair, liquidity);
+        (amountA, amountB) =
+            MockPancakePair(payable(pair)).burnLiquidityTokens(tokenA, tokenB, to, liquidity);
+        MockPancakePair(payable(pair)).sync(address(0));
     }
 
     function _assertPairInput(address pair, address inputToken) private view {

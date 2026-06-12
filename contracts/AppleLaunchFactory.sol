@@ -27,6 +27,7 @@ interface IAppleMintVaultDeployer {
         uint256 totalSupply,
         uint256 totalMints,
         uint256 mintPrice,
+        uint256 maxMintPerWallet,
         uint256 whitelistMintLimit,
         bool whitelistEnabled,
         bytes32 salt
@@ -54,6 +55,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         uint256 totalSupply;
         uint256 mintCount;
         uint256 mintPrice;
+        uint256 maxMintPerWallet;
         address paymentToken;
         address rewardToken;
         uint256 rewardThreshold;
@@ -88,6 +90,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         uint256 whitelistMintCount;
         uint256 publicMintCount;
         uint256 mintPrice;
+        uint256 maxMintPerWallet;
         bool whitelistEnabled;
         string metadataUri;
         uint64 createdAt;
@@ -219,6 +222,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             params.totalSupply,
             params.mintCount,
             params.mintPrice,
+            params.maxMintPerWallet,
             params.whitelistMintCount,
             params.whitelistEnabled,
             keccak256(abi.encodePacked(tokenSalt, "VAULT"))
@@ -244,6 +248,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             whitelistMintCount: params.whitelistMintCount,
             publicMintCount: params.mintCount - params.whitelistMintCount,
             mintPrice: params.mintPrice,
+            maxMintPerWallet: params.maxMintPerWallet,
             whitelistEnabled: params.whitelistEnabled,
             metadataUri: params.metadataUri,
             createdAt: uint64(block.timestamp),
@@ -343,7 +348,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             bytes(params.name).length == 0 || bytes(params.symbol).length == 0
                 || params.totalSupply == 0 || params.mintCount == 0 || params.receiver == address(0)
                 || params.mintPrice == 0 || params.totalSupply < params.mintCount
-                || params.whitelistMintCount > params.mintCount
+                || params.whitelistMintCount > params.mintCount || params.paymentToken != address(0)
         ) {
             revert InvalidParams();
         }

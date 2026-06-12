@@ -59,7 +59,7 @@
 Whitelist mode is controlled per project vault.
 
 - `whitelistEnabled`
-  - If `false`, all mint slots are public.
+  - If `false`, all remaining mint slots are public, including unused whitelist slots.
   - If `true`, public mint stays closed while whitelist quota remains.
   - Whitelisted wallets consume reserved whitelist slots first.
   - If one transaction fills the final whitelist slot, that same transaction may use public quota for any remaining requested quantity.
@@ -78,7 +78,7 @@ Whitelist mode is controlled per project vault.
 
 - `setWhitelistAccounts(address[] accounts, bool listed)`
   - Vault owner batch-adds or batch-removes wallets.
-  - The total listed wallet count cannot exceed `whitelistMintLimit`.
+  - The listed wallet count may exceed `whitelistMintLimit`; `whitelistMintLimit` only caps how many whitelist mint slots can be consumed.
 
 - `setWhitelistAllowance(address account, uint256 allowance)`
   - Backward-compatible helper.
@@ -92,7 +92,7 @@ Whitelist mode is controlled per project vault.
   - Returns remaining whitelist mint slots if the wallet is listed.
   - Returns `0` when the wallet is not listed.
 
-Whitelist minting is list-based: during the whitelist phase, `mint()` checks whether `msg.sender` is in `whitelistList`. It does not track per-wallet allowance anymore.
+Whitelist minting is list-based: during the whitelist phase, `mint()` checks whether `msg.sender` is in `whitelistList`. It does not track per-wallet allowance anymore. The owner can overbook the list, for example 20 listed wallets for 10 reserved whitelist mint slots.
 
 Only the vault owner can update the whitelist list. The factory sets the vault owner to the wallet that created the project.
 
@@ -221,7 +221,7 @@ The current UI only offers BNB and USDT for mint payments. USD1 was removed from
 The current source changes the `createLaunch` ABI and the `AppleToken.TaxConfig` constructor shape. Deploy a new Factory and new deployer contracts before creating projects with the advanced tax fields.
 
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
-- Factory: `0xB3869F838dBC8D9886653FC1d77f49d88B0B273D`.
+- Factory: `0x1aaB224fDb05bAC96d49557c8928e21Fc5Cbb28a`.
 - Token Deployer: `0x294e1C2D05E33FE82B0Ac3B4985677a7E18a3B9b`.
 - Vault Deployer: `0x37E6E7bbcA50ddA94547a52A60914a5b979601b6`.
 - Pancake V2 Router: `0x10ED43C718714eb63d5aA57B78B54704E256024E`.
@@ -230,7 +230,7 @@ The current source changes the `createLaunch` ABI and the `AppleToken.TaxConfig`
 - Audit Registry deployment transaction: `0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a`.
 - Fee recipient: configured by environment variable during deployment.
 - Creation fee: `0.005 BNB`.
-- Factory source is verified on BscScan: `https://bscscan.com/address/0xB3869F838dBC8D9886653FC1d77f49d88B0B273D#code`.
+- Factory source is verified on BscScan: `https://bscscan.com/address/0x1aaB224fDb05bAC96d49557c8928e21Fc5Cbb28a#code`.
 - Token Deployer source is verified on BscScan: `https://bscscan.com/address/0x294e1C2D05E33FE82B0Ac3B4985677a7E18a3B9b#code`.
 - Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0x37E6E7bbcA50ddA94547a52A60914a5b979601b6#code`.
 - Audit Registry source is verified on BscScan: `https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code`.
@@ -243,8 +243,9 @@ Current tests cover:
 - Users can mint real ERC20 balances from the vault.
 - Factory rejects launch creation without the required fee.
 - Factory refunds deployment fee overpayment.
-- Whitelist mode blocks non-whitelisted minting, allows listed wallets, and rejects list overflow.
+- Whitelist mode blocks non-whitelisted minting, allows listed wallets, and supports list overbooking.
 - Public and whitelist mint quotas are tracked separately.
+- Disabling whitelist mode releases unused whitelist slots to public minting.
 - Only the creator-owned vault can update the whitelist list.
 - Creator/template indexes and paged project reads are populated.
 - BNB mints automatically add Pancake V2 liquidity per mint and hold LP in the vault.
@@ -252,6 +253,7 @@ Current tests cover:
 - Unsold launches allow buyers to refund after 24 hours by returning minted tokens and removing their LP share.
 - Regular token transfers are locked before sellout and unlocked automatically after sellout.
 - Sell tax triggers real swapback: burn reduces supply, platform and marketing buckets swap to native BNB, liquidity bucket adds LP to the black hole, and dividend bucket swaps to reward token for holder claiming.
+- Swapback failures do not block user sells; unprocessed tax tokens remain in the token contract for a later successful processing attempt.
 - Token-level `mintToken(uint256)` forwards the real caller into the vault, so BscScan-style mint buttons still honor whitelist and public mint accounting.
 - Transfer tax, dividend `claimWait`, and add-liquidity tax are covered by dedicated tests.
 - Zero-price launch rejection, finalized pair dividend exclusion, and pending dividend carry-forward are covered by dedicated tests.

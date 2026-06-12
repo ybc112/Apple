@@ -302,6 +302,7 @@ function normalizeLaunchParams(params) {
     totalSupply: requiredBigInt(params.totalSupply, "params.totalSupply"),
     mintCount: requiredBigInt(params.mintCount, "params.mintCount"),
     mintPrice: requiredBigInt(params.mintPrice, "params.mintPrice"),
+    maxMintPerWallet: BigInt(params.maxMintPerWallet ?? 0),
     paymentToken: normalizeAddress(params.paymentToken ?? ZeroAddress),
     rewardToken: normalizeAddress(params.rewardToken ?? ZeroAddress),
     rewardThreshold: BigInt(params.rewardThreshold ?? 0),

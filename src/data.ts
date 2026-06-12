@@ -24,6 +24,7 @@ export const initialForm: FormState = {
   mintCount: '2000',
   publicMintCount: '1800',
   whitelistMintCount: '200',
+  maxMintPerWallet: '0',
   mintPrice: '0.003',
   paymentToken: ZERO_ADDRESS,
   rewardToken: '',
@@ -118,11 +119,5 @@ export const paymentTokens = [
     symbol: 'BNB',
     address: ZERO_ADDRESS,
     note: '原生 BNB mint',
-  },
-  {
-    label: 'USDT',
-    symbol: 'USDT',
-    address: USDT_ADDRESS,
-    note: 'BSC USDT',
   },
 ]

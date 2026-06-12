@@ -22,6 +22,7 @@ export type FormState = {
   mintCount: string
   publicMintCount: string
   whitelistMintCount: string
+  maxMintPerWallet: string
   mintPrice: string
   paymentToken: string
   rewardToken: string
@@ -84,6 +85,7 @@ export type LaunchProject = {
   mintCount: string
   mintPrice: string
   mintPriceWei: string
+  maxMintPerWallet: string
   paymentSymbol: string
   mintedCount: string
   publicMintCount: string

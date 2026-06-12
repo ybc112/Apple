@@ -71,6 +71,7 @@ contract AppleMintVaultDeployer is Ownable {
         uint256 totalSupply,
         uint256 totalMints,
         uint256 mintPrice,
+        uint256 maxMintPerWallet,
         uint256 whitelistMintLimit,
         bool whitelistEnabled,
         bytes32 salt
@@ -91,6 +92,7 @@ contract AppleMintVaultDeployer is Ownable {
             totalSupply,
             totalMints,
             mintPrice,
+            maxMintPerWallet,
             whitelistMintLimit,
             whitelistEnabled
         ));
