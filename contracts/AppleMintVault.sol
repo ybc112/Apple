@@ -92,6 +92,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     error LengthMismatch();
     error WhitelistListFull();
     error DirectNativePayment();
+    error NotLaunchToken();
 
     event Minted(
         address indexed minter,
@@ -162,6 +163,21 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     }
 
     function mint(uint256 quantity) external payable nonReentrant {
+        _mintFor(msg.sender, quantity);
+    }
+
+    function mintFor(address minter, uint256 quantity) external payable nonReentrant {
+        if (msg.sender != address(token)) {
+            revert NotLaunchToken();
+        }
+        if (minter == address(0)) {
+            revert ZeroAddress();
+        }
+
+        _mintFor(minter, quantity);
+    }
+
+    function _mintFor(address minter, uint256 quantity) private {
         if (finalized) {
             revert LaunchAlreadyFinalized();
         }
@@ -176,7 +192,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
 
         uint256 cost = quote(quantity);
-        (uint256 whitelistQuantity, uint256 publicQuantity) = _consumeMintQuota(msg.sender, quantity);
+        (uint256 whitelistQuantity, uint256 publicQuantity) = _consumeMintQuota(minter, quantity);
 
         uint256 tokenAmount = tokensPerMint * quantity;
         if (mintedCount == totalMints) {
@@ -192,15 +208,15 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
             if (msg.value != 0) {
                 revert IncorrectPayment();
             }
-            IERC20(paymentToken).safeTransferFrom(msg.sender, address(this), cost);
+            IERC20(paymentToken).safeTransferFrom(minter, address(this), cost);
         }
 
-        paidByWallet[msg.sender] += cost;
-        IERC20(address(token)).safeTransfer(msg.sender, tokenAmount);
+        paidByWallet[minter] += cost;
+        IERC20(address(token)).safeTransfer(minter, tokenAmount);
         if (paymentToken == address(0)) {
-            _addMintLiquidity(msg.sender, quantity, cost);
+            _addMintLiquidity(minter, quantity, cost);
         }
-        emit Minted(msg.sender, quantity, whitelistQuantity, publicQuantity, tokenAmount, cost);
+        emit Minted(minter, quantity, whitelistQuantity, publicQuantity, tokenAmount, cost);
 
         if (mintedCount == totalMints) {
             _finalizeLaunch();

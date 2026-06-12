@@ -138,6 +138,15 @@ The UI fields map to contract fields as follows:
 
 The split total can be lower than 100%. The remaining unallocated part of a charged tax goes to the project receiver. The split total cannot exceed 100%, and buy/sell tax cannot exceed 25%.
 
+Advanced tax controls:
+
+- `transferTaxBps` applies to wallet-to-wallet transfers after trading opens.
+- `addLiquidityTaxBps` applies when the token detects a Pancake V2 add-liquidity transfer into the configured pair.
+- `removeLiquidityTaxBps` applies when the token detects a Pancake V2 remove-liquidity transfer out of the configured pair.
+- `launchProtectionTaxBps` can temporarily override buy/sell tax during the first `launchProtectionBlocks` blocks after trading opens.
+- `claimWait` controls the minimum delay between manual dividend claims and is capped at 24 hours.
+- LP detection fails closed: if an AMM pair address is not a contract or does not expose the expected V2 pair interface, the token treats the transfer as a normal buy/sell/transfer instead of reverting.
+
 Dividend claiming:
 
 - `unpaidDividend(account)` reads the current claimable reward-token amount.
@@ -206,6 +215,8 @@ The current UI only offers BNB and USDT for mint payments. USD1 was removed from
 
 ## BNB Chain Deployment
 
+The current source changes the `createLaunch` ABI and the `AppleToken.TaxConfig` constructor shape. Deploy a new Factory and new deployer contracts before creating projects with the advanced tax fields.
+
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
 - Factory: `0x9C0C827b3E4a386939E5F3221c2A13c65f808278`.
 - Token Deployer: `0xf10445603aAEEDF5aEa579e6059C65796A23E3CA`.
@@ -238,4 +249,6 @@ Current tests cover:
 - Unsold launches allow buyers to refund after 24 hours by returning minted tokens and removing their LP share.
 - Regular token transfers are locked before sellout and unlocked automatically after sellout.
 - Sell tax triggers real swapback: burn reduces supply, platform and marketing buckets swap to native BNB, liquidity bucket adds LP to the black hole, and dividend bucket swaps to reward token for holder claiming.
+- Token-level `mintToken(uint256)` forwards the real caller into the vault, so BscScan-style mint buttons still honor whitelist and public mint accounting.
+- Transfer tax, dividend `claimWait`, and add-liquidity tax are covered by dedicated tests.
 - Auditor registry covers application, owner approval, approved-auditor-only review submission, review updates, and project review reads.

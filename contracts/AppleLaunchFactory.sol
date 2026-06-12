@@ -61,6 +61,12 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         bytes32 templateId;
         uint16 buyTaxBps;
         uint16 sellTaxBps;
+        uint16 transferTaxBps;
+        uint16 addLiquidityTaxBps;
+        uint16 removeLiquidityTaxBps;
+        uint16 launchProtectionTaxBps;
+        uint16 launchProtectionBlocks;
+        uint32 claimWait;
         uint16 fundFeeBps;
         uint16 lpFeeBps;
         uint16 dividendFeeBps;
@@ -89,6 +95,12 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         uint256 rewardThreshold;
         uint16 buyTaxBps;
         uint16 sellTaxBps;
+        uint16 transferTaxBps;
+        uint16 addLiquidityTaxBps;
+        uint16 removeLiquidityTaxBps;
+        uint16 launchProtectionTaxBps;
+        uint16 launchProtectionBlocks;
+        uint32 claimWait;
         uint16 fundFeeBps;
         uint16 lpFeeBps;
         uint16 dividendFeeBps;
@@ -181,6 +193,12 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             AppleToken.TaxConfig({
                 buyTaxBps: params.buyTaxBps,
                 sellTaxBps: params.sellTaxBps,
+                transferTaxBps: params.transferTaxBps,
+                addLiquidityTaxBps: params.addLiquidityTaxBps,
+                removeLiquidityTaxBps: params.removeLiquidityTaxBps,
+                launchProtectionTaxBps: params.launchProtectionTaxBps,
+                launchProtectionBlocks: params.launchProtectionBlocks,
+                claimWait: params.claimWait,
                 fundFeeBps: params.fundFeeBps,
                 lpFeeBps: params.lpFeeBps,
                 dividendFeeBps: params.dividendFeeBps,
@@ -233,6 +251,12 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             rewardThreshold: params.rewardThreshold,
             buyTaxBps: params.buyTaxBps,
             sellTaxBps: params.sellTaxBps,
+            transferTaxBps: params.transferTaxBps,
+            addLiquidityTaxBps: params.addLiquidityTaxBps,
+            removeLiquidityTaxBps: params.removeLiquidityTaxBps,
+            launchProtectionTaxBps: params.launchProtectionTaxBps,
+            launchProtectionBlocks: params.launchProtectionBlocks,
+            claimWait: params.claimWait,
             fundFeeBps: params.fundFeeBps,
             lpFeeBps: params.lpFeeBps,
             dividendFeeBps: params.dividendFeeBps,
@@ -328,6 +352,11 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
 
         if (
             params.buyTaxBps > MAX_TAX_BPS || params.sellTaxBps > MAX_TAX_BPS
+                || params.transferTaxBps > MAX_TAX_BPS
+                || params.addLiquidityTaxBps > MAX_TAX_BPS
+                || params.removeLiquidityTaxBps > MAX_TAX_BPS
+                || params.launchProtectionTaxBps > MAX_TAX_BPS
+                || params.claimWait > 24 hours
                 || splitTotal > BPS_DENOMINATOR
         ) {
             revert InvalidParams();

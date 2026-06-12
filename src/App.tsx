@@ -70,6 +70,7 @@ import {
 import type {
   AllocationKey,
   AllocationState,
+  AdvancedTaxState,
   DeployState,
   FormState,
   LaunchProject,
@@ -325,7 +326,7 @@ const copy = {
       whitelistMintCount: '白名单份数',
       mintPrice: '单次价格',
       whitelistTitle: '开启白名单 Mint',
-      whitelistDesc: '开启后，只有项目方在 Vault 里设置过额度的钱包可以 mint。',
+      whitelistDesc: '开启后，只有项目方加入白名单列表的钱包可以 mint。',
       section04: '04 税收分配',
       taxTitle: '买卖税与四项分配',
       total: (value: number) => `总计 ${value}%`,
@@ -772,6 +773,15 @@ const paymentTokenNotes: Record<Language, Record<string, string>> = {
   },
 }
 
+const initialAdvancedTax: AdvancedTaxState = {
+  transferTax: 0,
+  addLiquidityTax: 0,
+  removeLiquidityTax: 0,
+  launchProtectionTax: 0,
+  launchProtectionBlocks: '0',
+  claimWaitSeconds: '60',
+}
+
 function App() {
   const [page, setPage] = useState<PageKey>(() => readPageFromHash())
   const [menuOpen, setMenuOpen] = useState(false)
@@ -788,6 +798,7 @@ function App() {
   }))
   const [templateId, setTemplateId] = useState<TemplateId>('standard')
   const [allocation, setAllocation] = useState<AllocationState>(initialAllocation)
+  const [advancedTax, setAdvancedTax] = useState<AdvancedTaxState>(initialAdvancedTax)
   const [buyTax, setBuyTax] = useState(3)
   const [sellTax, setSellTax] = useState(3)
   const [whitelistEnabled, setWhitelistEnabled] = useState(true)
@@ -1066,6 +1077,13 @@ function App() {
     })
   }
 
+  const updateAdvancedTax = <Key extends keyof AdvancedTaxState>(
+    key: Key,
+    value: AdvancedTaxState[Key],
+  ) => {
+    setAdvancedTax((current) => ({ ...current, [key]: value }))
+  }
+
   const submitLaunch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -1097,6 +1115,7 @@ function App() {
         {
           form,
           allocation,
+          advancedTax,
           buyTax,
           sellTax,
           templateId,
@@ -1512,6 +1531,7 @@ function App() {
       )}
       {page === 'launch' && (
         <LaunchPage
+          advancedTax={advancedTax}
           allocation={allocation}
           allocationTotal={allocationTotal}
           buyTax={buyTax}
@@ -1530,6 +1550,7 @@ function App() {
           templateId={templateId}
           text={text}
           unallocated={unallocated}
+          updateAdvancedTax={updateAdvancedTax}
           updateAllocation={updateAllocation}
           updateForm={updateForm}
           wallet={wallet}
@@ -2337,6 +2358,32 @@ function ProjectDetailPage({
           <DetailRow label={text.detail.buyTax} value={taxSummary(project.buyTaxBps)} />
           <DetailRow label={text.detail.sellTax} value={taxSummary(project.sellTaxBps)} />
           <DetailRow
+            label={language === 'zh' ? '转账税' : 'Transfer tax'}
+            value={taxSummary(project.transferTaxBps)}
+          />
+          <DetailRow
+            label={language === 'zh' ? '加池税' : 'Add LP tax'}
+            value={taxSummary(project.addLiquidityTaxBps)}
+          />
+          <DetailRow
+            label={language === 'zh' ? '撤池税' : 'Remove LP tax'}
+            value={taxSummary(project.removeLiquidityTaxBps)}
+          />
+          <DetailRow
+            label={language === 'zh' ? '开盘保护' : 'Launch guard'}
+            value={
+              project.launchProtectionTaxBps > 0 && project.launchProtectionBlocks > 0
+                ? `${formatBps(project.launchProtectionTaxBps)} / ${project.launchProtectionBlocks} ${
+                    language === 'zh' ? '区块' : 'blocks'
+                  }`
+                : text.detail.disabled
+            }
+          />
+          <DetailRow
+            label={language === 'zh' ? '分红间隔' : 'Claim wait'}
+            value={`${project.claimWait}s`}
+          />
+          <DetailRow
             label={text.detail.marketing}
             value={`${portionPair(marketingSplitBps)} -> ${text.detail.toReceiver(project.receiver)}`}
           />
@@ -2728,6 +2775,7 @@ function SwapPage({
 }
 
 function LaunchPage({
+  advancedTax,
   allocation,
   allocationTotal,
   buyTax,
@@ -2746,11 +2794,13 @@ function LaunchPage({
   templateId,
   text,
   unallocated,
+  updateAdvancedTax,
   updateAllocation,
   updateForm,
   wallet,
   whitelistEnabled,
 }: {
+  advancedTax: AdvancedTaxState
   allocation: AllocationState
   allocationTotal: number
   buyTax: number
@@ -2769,6 +2819,7 @@ function LaunchPage({
   templateId: TemplateId
   text: (typeof copy)[Language]
   unallocated: number
+  updateAdvancedTax: <Key extends keyof AdvancedTaxState>(key: Key, value: AdvancedTaxState[Key]) => void
   updateAllocation: (key: AllocationKey, value: number) => void
   updateForm: <Key extends keyof FormState>(key: Key, value: FormState[Key]) => void
   wallet: WalletState
@@ -2780,6 +2831,25 @@ function LaunchPage({
     paymentTokens.find((token) => token.address.toLowerCase() === form.paymentToken.toLowerCase()) ??
     paymentTokens[0]
   const totalMintCount = Number(form.publicMintCount || 0) + Number(form.whitelistMintCount || 0)
+  const advancedTaxCopy = language === 'zh'
+    ? {
+        title: '高级税收',
+        transferTax: '转账税',
+        addLiquidityTax: '加池税',
+        removeLiquidityTax: '撤池税',
+        launchProtectionTax: '开盘保护税',
+        launchProtectionBlocks: '保护区块',
+        claimWait: '分红间隔(秒)',
+      }
+    : {
+        title: 'Advanced taxes',
+        transferTax: 'Transfer tax',
+        addLiquidityTax: 'Add LP tax',
+        removeLiquidityTax: 'Remove LP tax',
+        launchProtectionTax: 'Launch guard tax',
+        launchProtectionBlocks: 'Guard blocks',
+        claimWait: 'Claim wait (sec)',
+      }
 
   return (
     <main className="page narrow">
@@ -2930,6 +3000,45 @@ function LaunchPage({
             <div className="tax-box">
               <SliderField label={text.launch.buyTax} value={buyTax} max={25} onChange={setBuyTax} />
               <SliderField label={text.launch.sellTax} value={sellTax} max={25} onChange={setSellTax} />
+              <div className="advanced-tax-panel">
+                <strong>{advancedTaxCopy.title}</strong>
+                <div className="fields two">
+                  <SliderField
+                    label={advancedTaxCopy.transferTax}
+                    value={advancedTax.transferTax}
+                    max={25}
+                    onChange={(value) => updateAdvancedTax('transferTax', value)}
+                  />
+                  <SliderField
+                    label={advancedTaxCopy.addLiquidityTax}
+                    value={advancedTax.addLiquidityTax}
+                    max={25}
+                    onChange={(value) => updateAdvancedTax('addLiquidityTax', value)}
+                  />
+                  <SliderField
+                    label={advancedTaxCopy.removeLiquidityTax}
+                    value={advancedTax.removeLiquidityTax}
+                    max={25}
+                    onChange={(value) => updateAdvancedTax('removeLiquidityTax', value)}
+                  />
+                  <SliderField
+                    label={advancedTaxCopy.launchProtectionTax}
+                    value={advancedTax.launchProtectionTax}
+                    max={25}
+                    onChange={(value) => updateAdvancedTax('launchProtectionTax', value)}
+                  />
+                  <InputField
+                    label={advancedTaxCopy.launchProtectionBlocks}
+                    value={advancedTax.launchProtectionBlocks}
+                    onChange={(value) => updateAdvancedTax('launchProtectionBlocks', value)}
+                  />
+                  <InputField
+                    label={advancedTaxCopy.claimWait}
+                    value={advancedTax.claimWaitSeconds}
+                    onChange={(value) => updateAdvancedTax('claimWaitSeconds', value)}
+                  />
+                </div>
+              </div>
               <div className="tax-split">
                 <TaxRing allocation={allocation} language={language} totalLabel={text.launch.totalAllocation} />
                 <div className="tax-sliders">

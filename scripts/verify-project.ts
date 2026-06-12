@@ -53,6 +53,12 @@ const tokenConstructorArgs = [
   [
     project.buyTaxBps,
     project.sellTaxBps,
+    project.transferTaxBps,
+    project.addLiquidityTaxBps,
+    project.removeLiquidityTaxBps,
+    project.launchProtectionTaxBps,
+    project.launchProtectionBlocks,
+    project.claimWait,
     project.fundFeeBps,
     project.lpFeeBps,
     project.dividendFeeBps,

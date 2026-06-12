@@ -57,12 +57,17 @@ export const isLaunchpadConfigured =
   launchpadConfig.contractAdapterReady
 
 export const launchFactoryAbi = [
-  'function createLaunch((string name,string symbol,string metadataUri,uint256 totalSupply,uint256 mintCount,uint256 mintPrice,address paymentToken,address rewardToken,uint256 rewardThreshold,address receiver,bytes32 templateId,uint16 buyTaxBps,uint16 sellTaxBps,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps,uint256 whitelistMintCount,bool whitelistEnabled) params, bytes32 salt) payable returns (address token, address vault)',
+  'function createLaunch((string name,string symbol,string metadataUri,uint256 totalSupply,uint256 mintCount,uint256 mintPrice,address paymentToken,address rewardToken,uint256 rewardThreshold,address receiver,bytes32 templateId,uint16 buyTaxBps,uint16 sellTaxBps,uint16 transferTaxBps,uint16 addLiquidityTaxBps,uint16 removeLiquidityTaxBps,uint16 launchProtectionTaxBps,uint16 launchProtectionBlocks,uint32 claimWait,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps,uint256 whitelistMintCount,bool whitelistEnabled) params, bytes32 salt) payable returns (address token, address vault)',
   'function allTokensLength() view returns (uint256)',
   'function allTokens(uint256) view returns (address)',
+  'function getProject(address token) view returns ((address creator,address token,address vault,address paymentToken,address receiver,address platformFeeReceiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 transferTaxBps,uint16 addLiquidityTaxBps,uint16 removeLiquidityTaxBps,uint16 launchProtectionTaxBps,uint16 launchProtectionBlocks,uint32 claimWait,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps))',
+  'function projects(address) view returns (address creator,address token,address vault,address paymentToken,address receiver,address platformFeeReceiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 transferTaxBps,uint16 addLiquidityTaxBps,uint16 removeLiquidityTaxBps,uint16 launchProtectionTaxBps,uint16 launchProtectionBlocks,uint32 claimWait,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps)',
+  'event LaunchCreated(address indexed creator,address indexed token,address indexed vault,bytes32 templateId,string name,string symbol,uint256 totalSupply,uint256 mintCount,uint256 mintPrice,address paymentToken,bool whitelistEnabled,string metadataUri)',
+] as const
+
+const previousLaunchFactoryAbi = [
   'function getProject(address token) view returns ((address creator,address token,address vault,address paymentToken,address receiver,address platformFeeReceiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps))',
   'function projects(address) view returns (address creator,address token,address vault,address paymentToken,address receiver,address platformFeeReceiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps)',
-  'event LaunchCreated(address indexed creator,address indexed token,address indexed vault,bytes32 templateId,string name,string symbol,uint256 totalSupply,uint256 mintCount,uint256 mintPrice,address paymentToken,bool whitelistEnabled,string metadataUri)',
 ] as const
 
 const legacyLaunchFactoryAbi = [
@@ -137,6 +142,12 @@ type FactoryLaunchParams = {
   templateId: string
   buyTaxBps: number
   sellTaxBps: number
+  transferTaxBps: number
+  addLiquidityTaxBps: number
+  removeLiquidityTaxBps: number
+  launchProtectionTaxBps: number
+  launchProtectionBlocks: number
+  claimWait: number
   fundFeeBps: number
   lpFeeBps: number
   dividendFeeBps: number
@@ -753,6 +764,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
 
   const provider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
   const factory = new Contract(launchpadConfig.factoryAddress, launchFactoryAbi, provider)
+  const previousFactory = new Contract(launchpadConfig.factoryAddress, previousLaunchFactoryAbi, provider)
   const legacyFactory = new Contract(launchpadConfig.factoryAddress, legacyLaunchFactoryAbi, provider)
   const count = Number(await factory.allTokensLength())
   const start = Math.max(0, count - 24)
@@ -764,7 +776,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       continue
     }
 
-    const project = await readProject(factory, legacyFactory, tokenAddress)
+    const project = await readProject(factory, previousFactory, legacyFactory, tokenAddress)
     const creator = String(project.creator ?? project[0])
     const vaultAddress = String(project.vault ?? project[2])
     const paymentToken = String(project.paymentToken ?? project[3])
@@ -786,10 +798,18 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
     const rewardThreshold = hasNewProjectShape ? BigInt(project.rewardThreshold ?? project[15 + fieldOffset] ?? 0) : 0n
     const buyTaxBps = hasNewProjectShape ? Number(project.buyTaxBps ?? project[16 + fieldOffset] ?? 0) : 0
     const sellTaxBps = hasNewProjectShape ? Number(project.sellTaxBps ?? project[17 + fieldOffset] ?? 0) : 0
-    const fundFeeBps = hasNewProjectShape ? Number(project.fundFeeBps ?? project[18 + fieldOffset] ?? 0) : 0
-    const lpFeeBps = hasNewProjectShape ? Number(project.lpFeeBps ?? project[19 + fieldOffset] ?? 0) : 0
-    const dividendFeeBps = hasNewProjectShape ? Number(project.dividendFeeBps ?? project[20 + fieldOffset] ?? 0) : 0
-    const burnFeeBps = hasNewProjectShape ? Number(project.burnFeeBps ?? project[21 + fieldOffset] ?? 0) : 0
+    const hasAdvancedProjectShape = project.transferTaxBps !== undefined
+    const transferTaxBps = hasAdvancedProjectShape ? Number(project.transferTaxBps ?? project[19] ?? 0) : 0
+    const addLiquidityTaxBps = hasAdvancedProjectShape ? Number(project.addLiquidityTaxBps ?? project[20] ?? 0) : 0
+    const removeLiquidityTaxBps = hasAdvancedProjectShape ? Number(project.removeLiquidityTaxBps ?? project[21] ?? 0) : 0
+    const launchProtectionTaxBps = hasAdvancedProjectShape ? Number(project.launchProtectionTaxBps ?? project[22] ?? 0) : 0
+    const launchProtectionBlocks = hasAdvancedProjectShape ? Number(project.launchProtectionBlocks ?? project[23] ?? 0) : 0
+    const claimWait = hasAdvancedProjectShape ? Number(project.claimWait ?? project[24] ?? 0) : 60
+    const splitIndexOffset = hasAdvancedProjectShape ? 6 : 0
+    const fundFeeBps = hasNewProjectShape ? Number(project.fundFeeBps ?? project[18 + fieldOffset + splitIndexOffset] ?? 0) : 0
+    const lpFeeBps = hasNewProjectShape ? Number(project.lpFeeBps ?? project[19 + fieldOffset + splitIndexOffset] ?? 0) : 0
+    const dividendFeeBps = hasNewProjectShape ? Number(project.dividendFeeBps ?? project[20 + fieldOffset + splitIndexOffset] ?? 0) : 0
+    const burnFeeBps = hasNewProjectShape ? Number(project.burnFeeBps ?? project[21 + fieldOffset + splitIndexOffset] ?? 0) : 0
 
     const token = new Contract(tokenAddress, tokenAbi, provider)
     const vault = new Contract(vaultAddress, mintVaultAbi, provider)
@@ -889,6 +909,12 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       userDividendUnpaidFormatted: formatUnits(BigInt(userDividendUnpaid), 18),
       buyTaxBps,
       sellTaxBps,
+      transferTaxBps,
+      addLiquidityTaxBps,
+      removeLiquidityTaxBps,
+      launchProtectionTaxBps,
+      launchProtectionBlocks,
+      claimWait,
       fundFeeBps,
       lpFeeBps,
       dividendFeeBps,
@@ -906,6 +932,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
 function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLaunchParams {
   const text = messages[locale]
   const form = draft.form
+  const advancedTax = draft.advancedTax
   const paymentToken = normalizeAddress(form.paymentToken || ZeroAddress, text.paymentToken, locale)
   const rewardToken = normalizeAddress(form.rewardToken || USDT_ADDRESS, text.rewardToken, locale)
   const receiver = normalizeAddress(form.receiverWallet, text.receiver, locale)
@@ -927,6 +954,12 @@ function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLa
     templateId: id(draft.templateId),
     buyTaxBps: percentToBps(draft.buyTax),
     sellTaxBps: percentToBps(draft.sellTax),
+    transferTaxBps: percentToBps(advancedTax.transferTax),
+    addLiquidityTaxBps: percentToBps(advancedTax.addLiquidityTax),
+    removeLiquidityTaxBps: percentToBps(advancedTax.removeLiquidityTax),
+    launchProtectionTaxBps: percentToBps(advancedTax.launchProtectionTax),
+    launchProtectionBlocks: parseUintNumber(advancedTax.launchProtectionBlocks || '0'),
+    claimWait: parseUintNumber(advancedTax.claimWaitSeconds || '0'),
     fundFeeBps: percentToBps(draft.allocation.marketing),
     lpFeeBps: percentToBps(draft.allocation.liquidity),
     dividendFeeBps: percentToBps(draft.allocation.rewards),
@@ -1036,7 +1069,19 @@ function validateDraftForContract(draft: LaunchDraft, locale: LaunchpadLocale) {
     throw new Error(text.allocationOverflow)
   }
 
-  if (draft.buyTax > 25 || draft.sellTax > 25) {
+  const advancedTaxValues = [
+    draft.advancedTax.transferTax,
+    draft.advancedTax.addLiquidityTax,
+    draft.advancedTax.removeLiquidityTax,
+    draft.advancedTax.launchProtectionTax,
+  ]
+  if (draft.buyTax > 25 || draft.sellTax > 25 || advancedTaxValues.some((value) => value > 25)) {
+    throw new Error(text.taxTooHigh)
+  }
+
+  parseUintNumber(draft.advancedTax.launchProtectionBlocks || '0')
+  const claimWait = parseUintNumber(draft.advancedTax.claimWaitSeconds || '0')
+  if (claimWait > 24 * 60 * 60) {
     throw new Error(text.taxTooHigh)
   }
 }
@@ -1069,6 +1114,20 @@ function parseMintCount(value: string, errorMessage: string) {
   return BigInt(value.trim())
 }
 
+function parseUintNumber(value: string) {
+  const trimmed = value.trim()
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error('Invalid integer value.')
+  }
+
+  const nextValue = Number(trimmed)
+  if (!Number.isSafeInteger(nextValue) || nextValue < 0) {
+    throw new Error('Invalid integer value.')
+  }
+
+  return nextValue
+}
+
 function normalizeAddress(address: string, label: string, locale: LaunchpadLocale) {
   const nextAddress = address.trim()
 
@@ -1079,11 +1138,15 @@ function normalizeAddress(address: string, label: string, locale: LaunchpadLocal
   return nextAddress
 }
 
-async function readProject(factory: Contract, legacyFactory: Contract, tokenAddress: string) {
+async function readProject(factory: Contract, previousFactory: Contract, legacyFactory: Contract, tokenAddress: string) {
   try {
     return await factory.getProject(tokenAddress)
   } catch {
-    return legacyFactory.projects(tokenAddress)
+    try {
+      return await previousFactory.getProject(tokenAddress)
+    } catch {
+      return legacyFactory.projects(tokenAddress)
+    }
   }
 }
 

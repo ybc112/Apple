@@ -1601,6 +1601,22 @@ a {
   gap: 18px;
 }
 
+.advanced-tax-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(139, 215, 255, 0.18);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(139, 215, 255, 0.08), transparent 38%),
+    rgba(255, 255, 255, 0.045);
+}
+
+.advanced-tax-panel > strong {
+  color: #effff8;
+  font-size: 14px;
+}
+
 .slider-field span {
   display: flex;
   justify-content: space-between;

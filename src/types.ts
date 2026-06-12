@@ -36,6 +36,15 @@ export type AllocationKey = 'marketing' | 'liquidity' | 'rewards' | 'burn'
 
 export type AllocationState = Record<AllocationKey, number>
 
+export type AdvancedTaxState = {
+  transferTax: number
+  addLiquidityTax: number
+  removeLiquidityTax: number
+  launchProtectionTax: number
+  launchProtectionBlocks: string
+  claimWaitSeconds: string
+}
+
 export type LaunchTemplate = {
   id: TemplateId
   name: string
@@ -49,6 +58,7 @@ export type LaunchTemplate = {
 export type LaunchDraft = {
   form: FormState
   allocation: AllocationState
+  advancedTax: AdvancedTaxState
   buyTax: number
   sellTax: number
   templateId: TemplateId
@@ -96,6 +106,12 @@ export type LaunchProject = {
   userDividendUnpaidFormatted: string
   buyTaxBps: number
   sellTaxBps: number
+  transferTaxBps: number
+  addLiquidityTaxBps: number
+  removeLiquidityTaxBps: number
+  launchProtectionTaxBps: number
+  launchProtectionBlocks: number
+  claimWait: number
   fundFeeBps: number
   lpFeeBps: number
   dividendFeeBps: number

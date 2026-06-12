@@ -52,6 +52,12 @@ describe("AppleLaunchFactory", function () {
       templateId: ethers.id("standard"),
       buyTaxBps: 300,
       sellTaxBps: 300,
+      transferTaxBps: 0,
+      addLiquidityTaxBps: 0,
+      removeLiquidityTaxBps: 0,
+      launchProtectionTaxBps: 0,
+      launchProtectionBlocks: 0,
+      claimWait: 0,
       fundFeeBps: 4400,
       lpFeeBps: 1800,
       dividendFeeBps: 1600,
@@ -243,6 +249,12 @@ describe("AppleLaunchFactory", function () {
       await token.connect(creator).setTaxes({
         buyTaxBps: 100,
         sellTaxBps: 100,
+        transferTaxBps: 0,
+        addLiquidityTaxBps: 0,
+        removeLiquidityTaxBps: 0,
+        launchProtectionTaxBps: 0,
+        launchProtectionBlocks: 0,
+        claimWait: 0,
         fundFeeBps: 10000,
         lpFeeBps: 0,
         dividendFeeBps: 0,
@@ -558,5 +570,159 @@ describe("AppleLaunchFactory", function () {
 
     await token.connect(buyer).claimDividend();
     expect(await rewardToken.balanceOf(buyer.address)).to.equal(buyerUnpaid);
+  });
+
+  it("lets BscScan-style token mint buttons forward the real minter to the vault", async function () {
+    const { creator, buyer, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 4n,
+      whitelistMintCount: 2n,
+      whitelistEnabled: true,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-token-mint"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await vault.connect(creator).setWhitelistAllowance(buyer.address, 2n);
+    await token.connect(buyer).mintToken(2n, { value: params.mintPrice * 2n });
+
+    expect(await vault.mintedByWallet(buyer.address)).to.equal(2n);
+    expect(await vault.whitelistMintedByWallet(buyer.address)).to.equal(2n);
+    expect(await token.balanceOf(buyer.address)).to.equal((await vault.tokensPerMint()) * 2n);
+  });
+
+  it("charges wallet transfer tax separately from buy and sell tax", async function () {
+    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+      buyTaxBps: 0,
+      sellTaxBps: 0,
+      transferTaxBps: 200,
+      fundFeeBps: 10000,
+      lpFeeBps: 0,
+      dividendFeeBps: 0,
+      burnFeeBps: 0,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-transfer-tax"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
+
+    const amount = ethers.parseUnits("1000", 18);
+    const fee = (amount * BigInt(params.transferTaxBps)) / 10000n;
+    await token.connect(buyer).transfer(dividendReceiver.address, amount);
+
+    expect(await token.balanceOf(dividendReceiver.address)).to.equal(amount - fee);
+    expect(await token.balanceOf(await token.getAddress())).to.equal(fee);
+    expect(await token.tokensForPlatform()).to.equal((fee * BigInt(await token.PLATFORM_TAX_SHARE_BPS())) / 10000n);
+  });
+
+  it("enforces dividend claim wait after the first claim", async function () {
+    const { owner, creator, buyer, creationFee, factory, router } = await deployFactory();
+    const rewardToken = await ethers.deployContract("MockRewardToken");
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+      rewardToken: await rewardToken.getAddress(),
+      claimWait: 60,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-claim-wait"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await owner.sendTransaction({
+      to: await router.getAddress(),
+      value: ethers.parseEther("100"),
+    });
+    await token.connect(creator).setSwapSettings(true, 1n);
+    await token.connect(creator).setDistributorGas(0n);
+    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
+
+    const pairAddress = await getLiquidityPair(router, tokenAddress);
+    const transferAmount = ethers.parseUnits("1000", 18);
+    await token.connect(buyer).transfer(pairAddress, transferAmount);
+    const firstDividend = await token.unpaidDividend(buyer.address);
+    expect(firstDividend > 0n).to.equal(true);
+    await token.connect(buyer).claimDividend();
+
+    await token.connect(buyer).transfer(pairAddress, transferAmount);
+    expect((await token.unpaidDividend(buyer.address)) > 0n).to.equal(true);
+
+    let claimBlocked = false;
+    try {
+      await token.connect(buyer).claimDividend();
+    } catch {
+      claimBlocked = true;
+    }
+    expect(claimBlocked).to.equal(true);
+
+    await increaseTime(61);
+    await token.connect(buyer).claimDividend();
+    expect((await rewardToken.balanceOf(buyer.address)) > firstDividend).to.equal(true);
+  });
+
+  it("detects add-liquidity transfers and applies the configured LP add tax", async function () {
+    const { creator, buyer, creationFee, factory, router } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+      buyTaxBps: 0,
+      sellTaxBps: 0,
+      addLiquidityTaxBps: 500,
+      fundFeeBps: 10000,
+      lpFeeBps: 0,
+      dividendFeeBps: 0,
+      burnFeeBps: 0,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-add-lp-tax"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await token.connect(creator).setSwapSettings(false, 1n);
+    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
+
+    const addAmount = ethers.parseUnits("1000", 18);
+    const fee = (addAmount * BigInt(params.addLiquidityTaxBps)) / 10000n;
+    await token.connect(buyer).approve(await router.getAddress(), addAmount);
+    await router.connect(buyer).addLiquidityETH(
+      tokenAddress,
+      addAmount,
+      0,
+      0,
+      buyer.address,
+      0,
+      { value: ethers.parseEther("0.1") },
+    );
+
+    const pairAddress = await getLiquidityPair(router, tokenAddress);
+    expect(await token.balanceOf(pairAddress)).to.equal((await vault.liquidityAddedToken()) + addAmount - fee);
+    expect(await token.balanceOf(await token.getAddress())).to.equal(fee);
   });
 });
