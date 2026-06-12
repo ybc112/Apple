@@ -82,7 +82,10 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === "GET" && url.pathname.startsWith("/assets/")) {
+    if (
+      request.method === "GET"
+        && (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/api/assets/"))
+    ) {
       await sendAsset(response, url.pathname);
       return;
     }
@@ -385,7 +388,7 @@ async function saveDataUrlAsset(dataUrl, request) {
   }
 
   return {
-    url: `${publicBaseUrl(request)}/assets/${filename}`,
+    url: `${publicBaseUrl(request)}/api/assets/${filename}`,
     mimeType,
     bytes: bytes.length,
   };
