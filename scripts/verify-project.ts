@@ -138,7 +138,7 @@ async function verifyOne({
     "bsc",
     "--contract",
     contract,
-    "--constructor-args",
+    "--constructor-args-path",
     constructorArgsPath,
     address,
   ]);

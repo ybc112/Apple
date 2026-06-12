@@ -220,18 +220,18 @@ The current UI only offers BNB and USDT for mint payments. USD1 was removed from
 The current source changes the `createLaunch` ABI and the `AppleToken.TaxConfig` constructor shape. Deploy a new Factory and new deployer contracts before creating projects with the advanced tax fields.
 
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
-- Factory: `0x9C0C827b3E4a386939E5F3221c2A13c65f808278`.
-- Token Deployer: `0xf10445603aAEEDF5aEa579e6059C65796A23E3CA`.
-- Vault Deployer: `0xec5095945F9466aF35303b1726465E1dc0AE1466`.
+- Factory: `0xaF8Cf01201077D347351b672ebb6C66cACF9e44a`.
+- Token Deployer: `0x12C3396D77Cf42105216DBA71e7E6Cd711115629`.
+- Vault Deployer: `0xaBB3AA8d66235E5E499176Ba2391E1FCEb1E2458`.
 - Pancake V2 Router: `0x10ED43C718714eb63d5aA57B78B54704E256024E`.
 - Audit Registry: `0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084`.
-- Factory deployment transaction: `0x5d93da00386a414b3fcc765513111441084a1314c6d2c0d65fb404c14cef6f1e`.
+- Factory deployment transaction: `0x4e2c6613135fa0e1fe8d12820e4622e3924a95ed8e5ddcd1b53b41312335da21`.
 - Audit Registry deployment transaction: `0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a`.
 - Fee recipient: configured by environment variable during deployment.
 - Creation fee: `0.005 BNB`.
-- Factory source is verified on BscScan: `https://bscscan.com/address/0x9C0C827b3E4a386939E5F3221c2A13c65f808278#code`.
-- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0xf10445603aAEEDF5aEa579e6059C65796A23E3CA#code`.
-- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0xec5095945F9466aF35303b1726465E1dc0AE1466#code`.
+- Factory source is verified on BscScan: `https://bscscan.com/address/0xaF8Cf01201077D347351b672ebb6C66cACF9e44a#code`.
+- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0x12C3396D77Cf42105216DBA71e7E6Cd711115629#code`.
+- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0xaBB3AA8d66235E5E499176Ba2391E1FCEb1E2458#code`.
 - Audit Registry source is verified on BscScan: `https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code`.
 
 ## Test Coverage
