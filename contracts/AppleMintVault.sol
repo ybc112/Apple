@@ -68,13 +68,13 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     uint256 public liquidityAddedToken;
     uint256 public liquidityAddedNative;
     uint256 public liquidityLpAmount;
-    uint256 public totalWhitelistAllowance;
+    uint256 public whitelistAccountCount;
     uint256 public immutable refundDeadline;
     address public liquidityPair;
     bool public finalized;
     bool public whitelistEnabled;
 
-    mapping(address account => uint256 allowance) public whitelistAllowance;
+    mapping(address account => bool listed) public whitelistList;
     mapping(address account => uint256 minted) public whitelistMintedByWallet;
     mapping(address account => uint256 mintedByWallet) public mintedByWallet;
     mapping(address account => uint256 paid) public paidByWallet;
@@ -90,7 +90,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     error ZeroAddress();
     error NotWhitelisted();
     error LengthMismatch();
-    error WhitelistQuotaExceeded();
+    error WhitelistListFull();
     error DirectNativePayment();
 
     event Minted(
@@ -111,7 +111,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     );
     event Refunded(address indexed account, uint256 quantity, uint256 tokenAmount, uint256 paid);
     event WhitelistEnabledUpdated(bool enabled);
-    event WhitelistAllowanceUpdated(address indexed account, uint256 allowance);
+    event WhitelistListUpdated(address indexed account, bool listed);
 
     constructor(
         address token_,
@@ -282,24 +282,30 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         emit WhitelistEnabledUpdated(nextWhitelistEnabled);
     }
 
+    function setWhitelistAccount(address account, bool listed) external onlyOwner {
+        if (account == address(0)) {
+            revert ZeroAddress();
+        }
+
+        _setWhitelistAccount(account, listed);
+    }
+
     function setWhitelistAllowance(address account, uint256 allowance) external onlyOwner {
         if (account == address(0)) {
             revert ZeroAddress();
         }
 
-        _setWhitelistAllowance(account, allowance);
+        _setWhitelistAccount(account, allowance > 0);
     }
 
-    function _setWhitelistAllowance(address account, uint256 allowance) private {
-        uint256 previousAllowance = whitelistAllowance[account];
-        uint256 nextTotalAllowance = totalWhitelistAllowance - previousAllowance + allowance;
-        if (nextTotalAllowance > whitelistMintLimit) {
-            revert WhitelistQuotaExceeded();
-        }
+    function setWhitelistAccounts(address[] calldata accounts, bool listed) external onlyOwner {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            if (accounts[i] == address(0)) {
+                revert ZeroAddress();
+            }
 
-        whitelistAllowance[account] = allowance;
-        totalWhitelistAllowance = nextTotalAllowance;
-        emit WhitelistAllowanceUpdated(account, allowance);
+            _setWhitelistAccount(accounts[i], listed);
+        }
     }
 
     function setWhitelistAllowances(
@@ -318,23 +324,43 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
                 revert ZeroAddress();
             }
 
-            _setWhitelistAllowance(accounts[i], allowances[i]);
+            _setWhitelistAccount(accounts[i], allowances[i] > 0);
         }
     }
 
+    function totalWhitelistAllowance() external view returns (uint256) {
+        return whitelistAccountCount;
+    }
+
     function whitelistRemaining(address account) external view returns (uint256) {
-        uint256 allowance = whitelistAllowance[account];
-        uint256 minted = whitelistMintedByWallet[account];
+        if (!whitelistList[account]) {
+            return 0;
+        }
+
         uint256 remainingLimit = whitelistMintLimit > whitelistMintedCount
             ? whitelistMintLimit - whitelistMintedCount
             : 0;
 
-        if (minted >= allowance) {
-            return 0;
+        return remainingLimit;
+    }
+
+    function _setWhitelistAccount(address account, bool listed) private {
+        bool wasListed = whitelistList[account];
+        if (wasListed == listed) {
+            return;
         }
 
-        uint256 remainingAllowance = allowance - minted;
-        return remainingAllowance < remainingLimit ? remainingAllowance : remainingLimit;
+        if (listed) {
+            if (whitelistAccountCount + 1 > whitelistMintLimit) {
+                revert WhitelistListFull();
+            }
+            whitelistAccountCount += 1;
+        } else {
+            whitelistAccountCount -= 1;
+        }
+
+        whitelistList[account] = listed;
+        emit WhitelistListUpdated(account, listed);
     }
 
     function setReceiver(address nextReceiver) external onlyOwner {
@@ -375,15 +401,13 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         bool whitelistPhaseActive = whitelistEnabled && whitelistMintedCount < whitelistMintLimit;
 
         if (whitelistPhaseActive) {
-            uint256 allowance = whitelistAllowance[minter];
-            uint256 usedAllowance = whitelistMintedByWallet[minter];
-
-            if (allowance > usedAllowance) {
-                uint256 remainingAllowance = allowance - usedAllowance;
-                uint256 remainingWhitelistSlots = whitelistMintLimit - whitelistMintedCount;
-                whitelistQuantity = _min(remainingQuantity, _min(remainingAllowance, remainingWhitelistSlots));
-                remainingQuantity -= whitelistQuantity;
+            if (!whitelistList[minter]) {
+                revert NotWhitelisted();
             }
+
+            uint256 remainingWhitelistSlots = whitelistMintLimit - whitelistMintedCount;
+            whitelistQuantity = _min(remainingQuantity, remainingWhitelistSlots);
+            remainingQuantity -= whitelistQuantity;
 
             bool whitelistFilledAfterThisMint = whitelistMintedCount + whitelistQuantity >= whitelistMintLimit;
             if (remainingQuantity > 0 && !whitelistFilledAfterThisMint) {

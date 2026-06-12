@@ -360,7 +360,7 @@ describe("AppleLaunchFactory", function () {
   });
 
   it("enforces whitelist minting when whitelist mode is enabled", async function () {
-    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
+    const { creator, buyer, pair, dividendReceiver, creationFee, factory } = await deployFactory();
     const params = {
       ...launchParams(creator.address),
       mintCount: 2n,
@@ -396,10 +396,15 @@ describe("AppleLaunchFactory", function () {
     expect(nonOwnerBlocked).to.equal(true);
 
     await vault.connect(creator).setWhitelistAllowance(buyer.address, 2n);
+    expect(await vault.whitelistList(buyer.address)).to.equal(true);
+    expect(await vault.whitelistAccountCount()).to.equal(1n);
+
+    await vault.connect(creator).setWhitelistAllowance(dividendReceiver.address, 1n);
+    expect(await vault.whitelistAccountCount()).to.equal(2n);
 
     let quotaBlocked = false;
     try {
-      await vault.connect(creator).setWhitelistAllowance(dividendReceiver.address, 1n);
+      await vault.connect(creator).setWhitelistAllowance(pair.address, 1n);
     } catch {
       quotaBlocked = true;
     }

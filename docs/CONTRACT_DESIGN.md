@@ -72,19 +72,28 @@ Whitelist mode is controlled per project vault.
 - `setWhitelistEnabled(bool enabled)`
   - Vault owner can open or close whitelist mode.
 
+- `setWhitelistAccount(address account, bool listed)`
+  - Vault owner adds or removes one wallet from the whitelist list.
+
+- `setWhitelistAccounts(address[] accounts, bool listed)`
+  - Vault owner batch-adds or batch-removes wallets.
+  - The total listed wallet count cannot exceed `whitelistMintLimit`.
+
 - `setWhitelistAllowance(address account, uint256 allowance)`
-  - Vault owner sets one wallet's max mint quantity.
+  - Backward-compatible helper.
+  - Any value above zero adds the wallet to the list; zero removes it.
 
 - `setWhitelistAllowances(address[] accounts, uint256[] allowances)`
-  - Vault owner batch-sets whitelist allowances.
-  - The sum of all configured whitelist allowances cannot exceed `whitelistMintLimit`.
+  - Backward-compatible batch helper.
+  - Each value above zero adds that wallet to the list; zero removes it.
 
 - `whitelistRemaining(address account)`
-  - Returns how many mint slots the wallet still has.
+  - Returns remaining whitelist mint slots if the wallet is listed.
+  - Returns `0` when the wallet is not listed.
 
-The whitelist allowance is quantity-based, not token-amount-based. For example, if `tokensPerMint` is `500000 APPLE` and a wallet has allowance `2`, that wallet can mint two times.
+Whitelist minting is list-based: during the whitelist phase, `mint()` checks whether `msg.sender` is in `whitelistList`. It does not track per-wallet allowance anymore.
 
-Only the vault owner can update whitelist allowances. The factory sets the vault owner to the wallet that created the project.
+Only the vault owner can update the whitelist list. The factory sets the vault owner to the wallet that created the project.
 
 ## Fee Policy
 
@@ -179,7 +188,7 @@ The Swap page is a real frontend integration with PancakeSwap V2 Router on BNB C
 8. Factory transfers all token supply into the vault.
 9. Token ownership goes to the project creator.
 10. Vault ownership belongs to the project creator during the launch window.
-11. If whitelist mode is enabled, the project creator sets whitelist allowances before mint starts.
+11. If whitelist mode is enabled, the project creator sets whitelist list addresses before mint starts.
 12. Buyers mint from the vault during the 24-hour window.
 13. Each BNB mint automatically adds a matching Pancake V2 liquidity position and keeps LP in the vault.
 14. If sold out, the vault locks LP in the black hole, enables trading, and sends token/vault ownership to the black-hole address.
@@ -212,9 +221,9 @@ Current tests cover:
 - Users can mint real ERC20 balances from the vault.
 - Factory rejects launch creation without the required fee.
 - Factory refunds deployment fee overpayment.
-- Whitelist mode blocks non-whitelisted minting, allows configured allowance, and rejects over-limit minting.
+- Whitelist mode blocks non-whitelisted minting, allows listed wallets, and rejects list overflow.
 - Public and whitelist mint quotas are tracked separately.
-- Only the creator-owned vault can update whitelist allowance.
+- Only the creator-owned vault can update the whitelist list.
 - Creator/template indexes and paged project reads are populated.
 - BNB mints automatically add Pancake V2 liquidity per mint and hold LP in the vault.
 - Sold-out launches automatically lock LP, mark the pair, and enable trading.

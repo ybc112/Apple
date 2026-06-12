@@ -139,9 +139,9 @@ const copy = {
         `部署交易已提交：${hash}，已匹配尾号 ${suffix}：${token}。`,
       txConfirmed: '交易已确认，项目已经写入链上列表。',
       txConfirmedWithBackend: (token: string) => `交易已确认，合约 ${token} 已提交后端开源队列。`,
-      confirmWhitelist: '请在钱包里确认白名单额度交易。',
+      confirmWhitelist: '请在钱包里确认白名单列表交易。',
       whitelistSubmitted: (hash: string) => `白名单交易已提交：${hash}，正在等待链上确认。`,
-      whitelistConfirmed: '白名单额度已写入链上。',
+      whitelistConfirmed: '白名单列表已写入链上。',
       confirmMintApproval: '请先在钱包里授权付款代币给 Vault。',
       mintApprovalSubmitted: (hash: string) => `Mint 授权已提交：${hash}，正在等待链上确认。`,
       mintApprovalConfirmed: 'Mint 授权已确认，继续提交 mint 交易。',
@@ -221,15 +221,15 @@ const copy = {
         `白名单 ${whitelistMinted}/${whitelistTotal} · 公开 ${publicMinted}/${publicTotal}`,
       whitelistManage: '添加白名单',
       whitelistAddress: '批量粘贴白名单地址：每行一个，也支持空格、逗号或无 0x 地址',
-      whitelistAllowance: '统一可 mint 次数',
+      whitelistAllowance: '白名单列表',
       whitelistSubmit: '批量保存',
       whitelistPending: '等待确认',
-      whitelistBatchHint: '单次最多识别 200 个地址；白名单总额度不能超过项目设置的白名单份数。',
+      whitelistBatchHint: '单次最多识别 200 个地址；名单地址数量不能超过项目设置的白名单份数。',
       mint: 'Mint',
       mintQuantity: 'Mint 数量',
       mintCost: (amount: string) => `合计 ${amount}`,
       approveMint: '授权付款',
-      whitelistRemaining: (amount: string) => `白名单可用 ${amount}`,
+      whitelistRemaining: (amount: string) => `白名单剩余 ${amount} 份`,
       mintClosed: '已结束',
       refund: '申请退款',
       refundAvailable: (amount: string) => `可退款 ${amount}`,
@@ -432,9 +432,9 @@ const copy = {
         `Deployment transaction submitted: ${hash}. Matched suffix ${suffix}: ${token}.`,
       txConfirmed: 'Transaction confirmed. The project is now recorded in the on-chain list.',
       txConfirmedWithBackend: (token: string) => `Transaction confirmed. Contract ${token} was queued for backend verification.`,
-      confirmWhitelist: 'Confirm the whitelist allowance transaction in your wallet.',
+      confirmWhitelist: 'Confirm the whitelist list transaction in your wallet.',
       whitelistSubmitted: (hash: string) => `Whitelist transaction submitted: ${hash}. Waiting for confirmation.`,
-      whitelistConfirmed: 'Whitelist allowance is now recorded on-chain.',
+      whitelistConfirmed: 'Whitelist list is now recorded on-chain.',
       confirmMintApproval: 'Approve the payment token for the Vault first.',
       mintApprovalSubmitted: (hash: string) => `Mint approval submitted: ${hash}. Waiting for confirmation.`,
       mintApprovalConfirmed: 'Mint approval confirmed. Continue with the mint transaction.',
@@ -514,15 +514,15 @@ const copy = {
         `Whitelist ${whitelistMinted}/${whitelistTotal} · Public ${publicMinted}/${publicTotal}`,
       whitelistManage: 'Add whitelist',
       whitelistAddress: 'Paste whitelist addresses in bulk. One per line; spaces, commas, and no-0x addresses also work.',
-      whitelistAllowance: 'Mint allowance each',
+      whitelistAllowance: 'Whitelist list',
       whitelistSubmit: 'Batch save',
       whitelistPending: 'Waiting',
-      whitelistBatchHint: 'Up to 200 addresses per transaction. Total allowance cannot exceed the project whitelist slots.',
+      whitelistBatchHint: 'Up to 200 addresses per transaction. Listed address count cannot exceed the whitelist slots.',
       mint: 'Mint',
       mintQuantity: 'Mint quantity',
       mintCost: (amount: string) => `Total ${amount}`,
       approveMint: 'Approve payment',
-      whitelistRemaining: (amount: string) => `Whitelist left ${amount}`,
+      whitelistRemaining: (amount: string) => `Whitelist slots left ${amount}`,
       mintClosed: 'Closed',
       refund: 'Claim refund',
       refundAvailable: (amount: string) => `Refundable ${amount}`,
@@ -619,7 +619,7 @@ const copy = {
       whitelistMintCount: 'Whitelist count',
       mintPrice: 'Price per mint',
       whitelistTitle: 'Enable whitelist mint',
-      whitelistDesc: 'When enabled, only wallets with allowance set by the project owner in the Vault can mint.',
+      whitelistDesc: 'When enabled, only wallets listed by the project owner in the Vault can mint.',
       section04: '04 Taxes and rewards',
       taxTitle: 'Buy/sell taxes and allocation',
       total: (value: number) => `Total ${value}%`,
@@ -1907,21 +1907,18 @@ function ProjectCard({
   const [mintQuantity, setMintQuantity] = useState('1')
   const [mintPending, setMintPending] = useState(false)
   const [whitelistBatch, setWhitelistBatch] = useState('')
-  const [whitelistAllowance, setWhitelistAllowance] = useState('1')
   const [whitelistError, setWhitelistError] = useState('')
   const [whitelistSaving, setWhitelistSaving] = useState(false)
   const [refundPending, setRefundPending] = useState(false)
   const detectedWhitelistCount = collectWhitelistAccounts(whitelistBatch).length
-  const whitelistAllowanceValue = Number(normalizeMintInput(whitelistAllowance))
-  const whitelistBatchSlots = detectedWhitelistCount * whitelistAllowanceValue
   const progress = Math.min(100, Math.max(0, project.progress))
   const mintExpired = project.refundDeadline > 0 && Date.now() >= project.refundDeadline * 1000
   const mintOpen = !project.finalized && progress < 100 && !mintExpired
   const mintQuantityValue = Number(mintQuantity)
   const whitelistTotal = Number(project.whitelistMintCount)
   const whitelistMinted = Number(project.whitelistMintedCount)
-  const totalWhitelistAllowance = Number(project.totalWhitelistAllowance || '0')
-  const whitelistConfigRemaining = Math.max(0, whitelistTotal - totalWhitelistAllowance)
+  const totalWhitelistListed = Number(project.totalWhitelistAllowance || '0')
+  const whitelistConfigRemaining = Math.max(0, whitelistTotal - totalWhitelistListed)
   const whitelistSlotsRemaining = Math.max(0, whitelistTotal - whitelistMinted)
   const userWhitelistRemaining = Number(project.whitelistRemaining || '0')
   const whitelistPhaseActive = project.whitelistEnabled && whitelistTotal > 0 && whitelistSlotsRemaining > 0
@@ -2114,7 +2111,7 @@ function ProjectCard({
             setWhitelistSaving(true)
             setWhitelistError('')
             try {
-              const entries = parseWhitelistBatch(whitelistBatch, whitelistAllowance, language)
+              const entries = parseWhitelistBatch(whitelistBatch, language)
               validateWhitelistBatchAgainstProject(project, entries, language)
               await submitWhitelistAllowances(project, entries)
               setWhitelistBatch('')
@@ -2130,11 +2127,11 @@ function ProjectCard({
             {text.projects.whitelistManage}
           </strong>
           <div className="whitelist-capacity">
-            <span>{language === 'zh' ? '白名单额度' : 'Whitelist slots'}</span>
+            <span>{language === 'zh' ? '白名单列表' : 'Whitelist list'}</span>
             <strong>
-              {totalWhitelistAllowance}/{project.whitelistMintCount}
+              {totalWhitelistListed}/{project.whitelistMintCount}
             </strong>
-            <em>{language === 'zh' ? `剩余可配置 ${whitelistConfigRemaining}` : `${whitelistConfigRemaining} configurable left`}</em>
+            <em>{language === 'zh' ? `剩余可加入 ${whitelistConfigRemaining} 个地址` : `${whitelistConfigRemaining} addresses left`}</em>
           </div>
           <textarea
             className="whitelist-batch-input"
@@ -2146,21 +2143,9 @@ function ProjectCard({
             value={whitelistBatch}
             onChange={(event) => setWhitelistBatch(event.target.value)}
           />
-          <div className="whitelist-fields">
-            <label>
-              <span>{text.projects.whitelistAllowance}</span>
-              <input
-                inputMode="numeric"
-                min="1"
-                type="number"
-                value={whitelistAllowance}
-                onChange={(event) => setWhitelistAllowance(event.target.value)}
-              />
-            </label>
-            <div className="whitelist-count">
-              <span>{language === 'zh' ? `已识别 ${detectedWhitelistCount} 个地址` : `${detectedWhitelistCount} addresses detected`}</span>
-              <strong>{language === 'zh' ? `将占用 ${whitelistBatchSlots} 份` : `${whitelistBatchSlots} slots to use`}</strong>
-            </div>
+          <div className="whitelist-count simple">
+            <span>{language === 'zh' ? `已识别 ${detectedWhitelistCount} 个地址` : `${detectedWhitelistCount} addresses detected`}</span>
+            <strong>{language === 'zh' ? 'Mint 时只判断钱包是否在列表中' : 'Mint checks whether the wallet is listed'}</strong>
           </div>
           <em>{text.projects.whitelistBatchHint}</em>
           {whitelistError && <small className="form-error">{whitelistError}</small>}
@@ -3511,10 +3496,8 @@ function collectWhitelistAccounts(value: string) {
 
 function parseWhitelistBatch(
   value: string,
-  allowance: string,
   language: Language,
 ): WhitelistAllowanceEntry[] {
-  const normalizedAllowance = normalizeMintInput(allowance)
   const accounts = collectWhitelistAccounts(value)
 
   if (accounts.length === 0) {
@@ -3526,7 +3509,7 @@ function parseWhitelistBatch(
 
   return accounts.map((account) => ({
     account,
-    allowance: normalizedAllowance,
+    allowance: '1',
   }))
 }
 
@@ -3536,15 +3519,15 @@ function validateWhitelistBatchAgainstProject(
   language: Language,
 ) {
   const whitelistLimit = BigInt(project.whitelistMintCount || '0')
-  const configuredAllowance = BigInt(project.totalWhitelistAllowance || '0')
-  const remainingAllowance = whitelistLimit > configuredAllowance ? whitelistLimit - configuredAllowance : 0n
-  const requestedAllowance = entries.reduce((total, entry) => total + BigInt(entry.allowance), 0n)
+  const listedCount = BigInt(project.totalWhitelistAllowance || '0')
+  const remainingListSlots = whitelistLimit > listedCount ? whitelistLimit - listedCount : 0n
+  const requestedListSlots = BigInt(entries.length)
 
-  if (whitelistLimit > 0n && requestedAllowance > remainingAllowance) {
+  if (whitelistLimit > 0n && requestedListSlots > remainingListSlots) {
     throw new Error(
       language === 'zh'
-        ? `本次白名单额度不能超过剩余 ${remainingAllowance.toString()} 份。`
-        : `This batch cannot exceed the remaining ${remainingAllowance.toString()} whitelist slots.`,
+        ? `本次白名单地址数量不能超过剩余 ${remainingListSlots.toString()} 个。`
+        : `This batch cannot exceed the remaining ${remainingListSlots.toString()} whitelist addresses.`,
     )
   }
 }
