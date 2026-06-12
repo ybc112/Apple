@@ -230,7 +230,7 @@ const copy = {
       whitelistAllowance: '白名单列表',
       whitelistSubmit: '批量保存',
       whitelistPending: '等待确认',
-      whitelistBatchHint: '单次最多识别 200 个地址；名单地址数量可超过白名单份数。',
+      whitelistBatchHint: '单次最多识别 200 个地址，可分批提交；白名单份数只是可 mint 名额，不限制名单地址数量。',
       openPublicMint: '开放公开 Mint',
       mint: 'Mint',
       mintQuantity: 'Mint 数量',
@@ -524,7 +524,7 @@ const copy = {
       whitelistAllowance: 'Whitelist list',
       whitelistSubmit: 'Batch save',
       whitelistPending: 'Waiting',
-      whitelistBatchHint: 'Up to 200 addresses per transaction. Listed address count may exceed whitelist slots.',
+      whitelistBatchHint: 'Up to 200 addresses per transaction; submit more in batches. Slots cap mint quota, not listed address count.',
       openPublicMint: 'Open public mint',
       mint: 'Mint',
       mintQuantity: 'Mint quantity',
@@ -2242,7 +2242,7 @@ function ProjectCard({
             <strong>
               {language === 'zh' ? `${totalWhitelistListed} 个地址` : `${totalWhitelistListed} addresses`}
             </strong>
-            <em>{language === 'zh' ? `白名单剩余 ${whitelistSlotsRemaining} 份` : `${whitelistSlotsRemaining} whitelist slots left`}</em>
+            <em>{language === 'zh' ? `剩余可 mint ${whitelistSlotsRemaining} 份` : `${whitelistSlotsRemaining} mint slots left`}</em>
           </div>
           {whitelistPhaseActive && (
             <button
@@ -2275,7 +2275,7 @@ function ProjectCard({
           />
           <div className="whitelist-count simple">
             <span>{language === 'zh' ? `已识别 ${detectedWhitelistCount} 个地址` : `${detectedWhitelistCount} addresses detected`}</span>
-            <strong>{language === 'zh' ? 'Mint 时只判断钱包是否在列表中' : 'Mint checks whether the wallet is listed'}</strong>
+            <strong>{language === 'zh' ? '名单可超额添加，mint 时按剩余份数先到先得' : 'List can be overbooked; mint slots are first come, first served'}</strong>
           </div>
           <em>{text.projects.whitelistBatchHint}</em>
           {whitelistError && <small className="form-error">{whitelistError}</small>}

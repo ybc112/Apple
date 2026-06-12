@@ -23,6 +23,9 @@ const configuredVanitySuffix = String(import.meta.env.VITE_VANITY_SUFFIX ?? '')
   .trim()
   .replace(/^0x/i, '')
   .toLowerCase()
+const DEFAULT_APP_BACKEND_URL = 'https://apple-qy1h.onrender.com'
+const configuredBackendUrl =
+  String(import.meta.env.VITE_APP_BACKEND_URL ?? '').trim() || DEFAULT_APP_BACKEND_URL
 
 export const DEFAULT_LAUNCHPAD_FACTORY_ADDRESS = '0xB3869F838dBC8D9886653FC1d77f49d88B0B273D'
 export const DEFAULT_AUDIT_REGISTRY_ADDRESS = '0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084'
@@ -41,7 +44,7 @@ export const launchpadConfig = {
   ),
   creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? DEFAULT_CREATION_FEE_WEI),
   hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
-  backendUrl: normalizeBackendBaseUrl(String(import.meta.env.VITE_APP_BACKEND_URL ?? '')),
+  backendUrl: normalizeBackendBaseUrl(configuredBackendUrl),
   vanitySuffix: configuredVanitySuffix && configuredVanitySuffix !== '5555' ? configuredVanitySuffix : 'aaaa',
   contractAdapterReady: true,
 }
@@ -1077,17 +1080,21 @@ function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLa
 async function resolveLaunchSalt(
   creator: string,
   params: FactoryLaunchParams,
-  _locale: LaunchpadLocale,
+  locale: LaunchpadLocale,
 ) {
-  const fallback = {
-    salt: hexlify(randomBytes(32)),
-    predictedTokenAddress: '',
-    vanitySuffix: '',
-    vanityAttempts: 0,
+  const text = messages[locale]
+
+  if (!launchpadConfig.vanitySuffix) {
+    return {
+      salt: hexlify(randomBytes(32)),
+      predictedTokenAddress: '',
+      vanitySuffix: '',
+      vanityAttempts: 0,
+    }
   }
 
-  if (!launchpadConfig.backendUrl || !launchpadConfig.vanitySuffix) {
-    return fallback
+  if (!launchpadConfig.backendUrl) {
+    throw new Error(text.vanityUnavailable)
   }
 
   try {
@@ -1103,12 +1110,12 @@ async function resolveLaunchSalt(
     })
 
     if (!response.ok) {
-      return fallback
+      throw new Error(text.vanityUnavailable)
     }
 
     const result = (await response.json()) as VanitySaltResult
     if (!result.ok || !result.salt || !/^0x[0-9a-fA-F]{64}$/.test(result.salt)) {
-      return fallback
+      throw new Error(text.vanityUnavailable)
     }
     if (
       !result.factory ||
@@ -1116,17 +1123,24 @@ async function resolveLaunchSalt(
       result.factory.toLowerCase() !== launchpadConfig.factoryAddress.toLowerCase() ||
       Number(result.chainId ?? 0) !== launchpadConfig.chainId
     ) {
-      return fallback
+      throw new Error(text.vanityUnavailable)
+    }
+
+    const suffix = String(result.suffix ?? launchpadConfig.vanitySuffix).toLowerCase()
+    const predictedTokenAddress =
+      result.tokenAddress && isAddress(result.tokenAddress) ? result.tokenAddress : ''
+    if (!predictedTokenAddress || !predictedTokenAddress.toLowerCase().endsWith(suffix)) {
+      throw new Error(text.vanityUnavailable)
     }
 
     return {
       salt: result.salt,
-      predictedTokenAddress: result.tokenAddress && isAddress(result.tokenAddress) ? result.tokenAddress : '',
-      vanitySuffix: result.suffix ?? launchpadConfig.vanitySuffix,
+      predictedTokenAddress,
+      vanitySuffix: suffix,
       vanityAttempts: Number(result.attempts ?? 0),
     }
   } catch {
-    return fallback
+    throw new Error(text.vanityUnavailable)
   }
 }
 
