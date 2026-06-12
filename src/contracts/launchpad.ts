@@ -79,6 +79,7 @@ const mintVaultAbi = [
   'function mintedByWallet(address account) view returns (uint256)',
   'function paidByWallet(address account) view returns (uint256)',
   'function whitelistRemaining(address account) view returns (uint256)',
+  'function totalWhitelistAllowance() view returns (uint256)',
 ] as const
 
 const mintVaultWriteAbi = [
@@ -632,6 +633,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       userPaid,
       refundAllowance,
       whitelistRemaining,
+      totalWhitelistAllowance,
       mintPaymentAllowance,
       vaultTokenBalance,
     ] = await Promise.all([
@@ -649,6 +651,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       account && isAddress(account) ? vault.paidByWallet(account).catch(() => 0n) : 0n,
       account && isAddress(account) ? token.allowance(account, vaultAddress).catch(() => 0n) : 0n,
       account && isAddress(account) ? vault.whitelistRemaining(account).catch(() => 0n) : 0n,
+      vault.totalWhitelistAllowance().catch(() => 0n),
       account && isAddress(account) && paymentToken.toLowerCase() !== ZeroAddress
         ? new Contract(paymentToken, tokenAbi, provider).allowance(account, vaultAddress).catch(() => 0n)
         : 0n,
@@ -700,6 +703,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       userRefundAmount: formatRefundAmount(BigInt(userPaid), paymentToken),
       canRefund,
       whitelistRemaining: BigInt(whitelistRemaining).toString(),
+      totalWhitelistAllowance: BigInt(totalWhitelistAllowance).toString(),
       mintPaymentAllowance: BigInt(mintPaymentAllowance).toString(),
       rewardToken,
       rewardThreshold: formatUnits(rewardThreshold, 18),

@@ -88,6 +88,7 @@ export type LaunchProject = {
   userRefundAmount: string
   canRefund: boolean
   whitelistRemaining: string
+  totalWhitelistAllowance: string
   mintPaymentAllowance: string
   rewardToken: string
   rewardThreshold: string

@@ -1039,15 +1039,54 @@ a {
   font-size: 13px;
 }
 
+.whitelist-capacity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(141, 247, 196, 0.18);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.whitelist-capacity span,
+.whitelist-capacity em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.whitelist-capacity strong {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.whitelist-capacity em {
+  grid-column: 1 / -1;
+}
+
 .whitelist-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 124px;
+  grid-template-columns: minmax(150px, 0.58fr) minmax(0, 1fr);
   gap: 8px;
   align-items: stretch;
 }
 
+.whitelist-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.whitelist-fields label span {
+  color: var(--accent-2);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .whitelist-fields input,
-.whitelist-fields textarea {
+.whitelist-batch-input {
   min-width: 0;
   min-height: 38px;
   border: 1px solid rgba(104, 164, 154, 0.22);
@@ -1058,13 +1097,14 @@ a {
   background: rgba(0, 0, 0, 0.18);
 }
 
-.whitelist-fields textarea {
-  min-height: 168px;
+.whitelist-batch-input {
+  width: 100%;
+  min-height: 210px;
+  max-height: 340px;
   resize: vertical;
-  line-height: 1.5;
+  line-height: 1.55;
   overflow: auto;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
   white-space: pre-wrap;
@@ -1072,9 +1112,30 @@ a {
 }
 
 .whitelist-fields input:focus,
-.whitelist-fields textarea:focus {
+.whitelist-batch-input:focus {
   border-color: rgba(141, 247, 196, 0.48);
   box-shadow: 0 0 0 3px rgba(141, 247, 196, 0.08);
+}
+
+.whitelist-count {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid rgba(141, 247, 196, 0.18);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.whitelist-count span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.whitelist-count strong {
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .whitelist-manager > em {
@@ -1083,10 +1144,22 @@ a {
   font-style: normal;
 }
 
-.whitelist-detected {
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 900;
+.whitelist-manager > button[type="submit"] {
+  min-height: 48px;
+  border-color: rgba(141, 247, 196, 0.76);
+  color: #03100b;
+  background:
+    linear-gradient(135deg, #f1fff8 0%, #7cffd0 46%, #aee6ff 100%);
+  box-shadow:
+    0 16px 36px rgba(101, 255, 194, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.whitelist-manager > button[type="submit"]:hover {
+  border-color: rgba(221, 255, 242, 0.94);
+  color: #02110b;
+  background:
+    linear-gradient(135deg, #ffffff 0%, #85ffd5 46%, #c4edff 100%);
 }
 
 .project-skeleton {
@@ -2551,6 +2624,10 @@ input[type="range"]::-moz-range-thumb {
   .link-field,
   .whitelist-fields {
     grid-template-columns: 1fr;
+  }
+
+  .whitelist-batch-input {
+    min-height: 240px;
   }
 
   .link-icon {
