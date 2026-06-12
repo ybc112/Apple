@@ -198,6 +198,8 @@ const messages = {
     invalidMintQuantity: 'Mint 数量必须是大于 0 的整数。',
     invalidPaymentToken: '付款代币地址无效。',
     mintEstimateFailed: '当前无法预估 Mint Gas。请确认当前钱包是否在白名单列表、公开阶段是否已开放、钱包余额是否足够，并刷新页面后重试。',
+    insufficientNativeBalance: (required: string, balance: string) =>
+      `钱包 BNB 不足：预计至少需要 ${required} BNB，当前余额 ${balance} BNB。`,
     vanityUnavailable: '本次没有匹配到 AAAA 靓号地址，请重新点击部署再试一次。',
   },
   en: {
@@ -229,6 +231,8 @@ const messages = {
     invalidMintQuantity: 'Mint quantity must be an integer greater than 0.',
     invalidPaymentToken: 'Payment token address is invalid.',
     mintEstimateFailed: 'Unable to estimate mint gas. Check whitelist list status, public phase status, wallet balance, then refresh and try again.',
+    insufficientNativeBalance: (required: string, balance: string) =>
+      `Insufficient BNB balance. Estimated minimum ${required} BNB, current balance ${balance} BNB.`,
     vanityUnavailable: 'Could not match an AAAA vanity address this time. Click deploy again to retry.',
   },
 } as const
@@ -629,17 +633,18 @@ export async function mintLaunchProject(
     data,
   }
   const isNativeMint = project.paymentToken.toLowerCase() === ZeroAddress
+  const readProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
   let gas: string
   let gasPrice: string | undefined
 
   try {
-    await assertMintCanExecute(tx)
+    await assertMintCanExecute(readProvider, tx)
   } catch {
     throw new Error(text.mintEstimateFailed)
   }
 
   try {
-    const estimatedGas = await estimateMintGas(tx)
+    const estimatedGas = await estimateMintGas(readProvider, tx)
     const bufferedGas = (estimatedGas * MINT_GAS_BUFFER_BPS) / BPS_DENOMINATOR
     const nativeGas = isNativeMint && bufferedGas < NATIVE_MINT_GAS_FLOOR
       ? NATIVE_MINT_GAS_FLOOR
@@ -653,11 +658,24 @@ export async function mintLaunchProject(
   }
 
   try {
-    const readProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
     const currentGasPrice = BigInt(String(await readProvider.send('eth_gasPrice', [])))
     gasPrice = toBeHex((currentGasPrice * GAS_PRICE_BUFFER_BPS) / BPS_DENOMINATOR)
   } catch {
     gasPrice = undefined
+  }
+
+  if (isNativeMint && gasPrice) {
+    try {
+      const requiredBalance = cost + BigInt(gas) * BigInt(gasPrice)
+      const nativeBalance = await readProvider.getBalance(from)
+      if (nativeBalance < requiredBalance) {
+        throw new Error(text.insufficientNativeBalance(formatEther(requiredBalance), formatEther(nativeBalance)))
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('BNB')) {
+        throw error
+      }
+    }
   }
 
   const hash = (await provider.request({
@@ -675,16 +693,16 @@ export async function mintLaunchProject(
 }
 
 async function assertMintCanExecute(
+  rpcProvider: JsonRpcProvider,
   tx: { from: string; to: string; value: string; data: string },
 ) {
-  const rpcProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
   await rpcProvider.send('eth_call', [tx, 'latest'])
 }
 
 async function estimateMintGas(
+  rpcProvider: JsonRpcProvider,
   tx: { from: string; to: string; value: string; data: string },
 ) {
-  const rpcProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
   return BigInt(String(await rpcProvider.send('eth_estimateGas', [tx])))
 }
 
