@@ -24,6 +24,8 @@ export const launchpadConfig = {
   factoryAddress: String(import.meta.env.VITE_LAUNCHPAD_FACTORY_ADDRESS ?? ''),
   creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? '5000000000000000'),
   hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
+  backendUrl: normalizeBackendBaseUrl(String(import.meta.env.VITE_APP_BACKEND_URL ?? '')),
+  vanitySuffix: String(import.meta.env.VITE_VANITY_SUFFIX ?? '5555').trim().replace(/^0x/i, '').toLowerCase(),
   contractAdapterReady: true,
 }
 
@@ -95,6 +97,10 @@ const tokenWriteAbi = [
 
 export type LaunchTransactionResult = {
   hash: string
+  salt?: string
+  predictedTokenAddress?: string
+  vanitySuffix?: string
+  vanityAttempts?: number
 }
 
 export type WhitelistAllowanceEntry = {
@@ -134,6 +140,19 @@ type ProjectMetadata = {
 
 type TransactionReceipt = {
   status?: string | null
+  logs?: Array<{
+    address?: string
+    data: string
+    topics: string[]
+  }>
+}
+
+type VanitySaltResult = {
+  ok: boolean
+  suffix?: string
+  salt?: string
+  tokenAddress?: string
+  attempts?: number
 }
 
 const messages = {
@@ -224,7 +243,8 @@ export async function createLaunchToken(
 
   const params = toFactoryParams(draft, locale)
   const iface = new Interface(launchFactoryAbi)
-  const salt = hexlify(randomBytes(32))
+  const vanity = await resolveLaunchSalt(from, params)
+  const salt = vanity.salt
   const data = iface.encodeFunctionData('createLaunch', [params, salt])
 
   const hash = (await provider.request({
@@ -239,7 +259,13 @@ export async function createLaunchToken(
     ],
   })) as string
 
-  return { hash }
+  return {
+    hash,
+    salt,
+    predictedTokenAddress: vanity.predictedTokenAddress,
+    vanitySuffix: vanity.vanitySuffix,
+    vanityAttempts: vanity.vanityAttempts,
+  }
 }
 
 export async function waitForTransactionReceipt(
@@ -269,6 +295,48 @@ export async function waitForTransactionReceipt(
   }
 
   throw new Error(text.txTimeout)
+}
+
+export function readLaunchCreatedToken(receipt: TransactionReceipt | null | undefined) {
+  if (!receipt?.logs?.length || !isAddress(launchpadConfig.factoryAddress)) {
+    return ''
+  }
+
+  const iface = new Interface(launchFactoryAbi)
+  for (const log of receipt.logs) {
+    if (log.address && log.address.toLowerCase() !== launchpadConfig.factoryAddress.toLowerCase()) {
+      continue
+    }
+
+    try {
+      const parsed = iface.parseLog({ data: log.data, topics: log.topics })
+      if (parsed?.name === 'LaunchCreated' && isAddress(String(parsed.args.token))) {
+        return String(parsed.args.token)
+      }
+    } catch {
+      // Ignore non-Factory logs in the same receipt.
+    }
+  }
+
+  return ''
+}
+
+export async function queueProjectVerification(tokenAddress: string) {
+  if (!launchpadConfig.backendUrl || !isAddress(tokenAddress)) {
+    return { ok: false, skipped: true }
+  }
+
+  const response = await fetch(buildBackendUrl('/api/verify-project'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: tokenAddress }),
+  })
+
+  if (!response.ok) {
+    return { ok: false, skipped: true }
+  }
+
+  return (await response.json()) as { ok: boolean; token?: string }
 }
 
 export async function setProjectWhitelistAllowance(
@@ -756,6 +824,60 @@ function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLa
   }
 }
 
+async function resolveLaunchSalt(creator: string, params: FactoryLaunchParams) {
+  const fallback = {
+    salt: hexlify(randomBytes(32)),
+    predictedTokenAddress: '',
+    vanitySuffix: '',
+    vanityAttempts: 0,
+  }
+
+  if (!launchpadConfig.backendUrl || !launchpadConfig.vanitySuffix) {
+    return fallback
+  }
+
+  try {
+    const response = await fetch(buildBackendUrl('/api/vanity-salt'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        suffix: launchpadConfig.vanitySuffix,
+        creator,
+        params: serializeFactoryParams(params),
+      }),
+    })
+
+    if (!response.ok) {
+      return fallback
+    }
+
+    const result = (await response.json()) as VanitySaltResult
+    if (!result.ok || !result.salt || !/^0x[0-9a-fA-F]{64}$/.test(result.salt)) {
+      return fallback
+    }
+
+    return {
+      salt: result.salt,
+      predictedTokenAddress: result.tokenAddress && isAddress(result.tokenAddress) ? result.tokenAddress : '',
+      vanitySuffix: result.suffix ?? launchpadConfig.vanitySuffix,
+      vanityAttempts: Number(result.attempts ?? 0),
+    }
+  } catch {
+    return fallback
+  }
+}
+
+function serializeFactoryParams(params: FactoryLaunchParams) {
+  return {
+    ...params,
+    totalSupply: params.totalSupply.toString(),
+    mintCount: params.mintCount.toString(),
+    mintPrice: params.mintPrice.toString(),
+    rewardThreshold: params.rewardThreshold.toString(),
+    whitelistMintCount: params.whitelistMintCount.toString(),
+  }
+}
+
 function validateDraftForContract(draft: LaunchDraft, locale: LaunchpadLocale) {
   const text = messages[locale]
   const form = draft.form
@@ -895,6 +1017,14 @@ function getPaymentSymbol(paymentToken: string) {
   }
 
   return paymentToken.toLowerCase() === USDT_ADDRESS.toLowerCase() ? 'USDT' : 'TOKEN'
+}
+
+function normalizeBackendBaseUrl(value: string) {
+  return value.trim().replace(/\/+$/, '')
+}
+
+function buildBackendUrl(path: string) {
+  return `${launchpadConfig.backendUrl}${path}`
 }
 
 function delay(ms: number) {

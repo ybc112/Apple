@@ -24,9 +24,23 @@ BSCSCAN_API_KEY=your_bscscan_key
 FACTORY_ADDRESS=0x9C0C827b3E4a386939E5F3221c2A13c65f808278
 APPLE_BACKEND_PORT=8787
 AUTO_VERIFY_PROJECTS=true
+APPLE_CORS_ORIGIN=https://your-frontend.example
+APPLE_VERIFY_RATE_LIMIT=30
+APPLE_VANITY_RATE_LIMIT=6
 ```
 
 Do not put `BSCSCAN_API_KEY`, `PRIVATE_KEY`, or `APPLE_BACKEND_TOKEN` in frontend env variables.
+
+Frontend environment:
+
+```bash
+VITE_APP_BACKEND_URL=https://your-backend.example
+VITE_VANITY_SUFFIX=5555
+```
+
+When `VITE_APP_BACKEND_URL` is configured, the launch page asks the backend for a CREATE2 salt before sending the wallet transaction. After the transaction confirms, the frontend parses the `LaunchCreated` event and queues the new project for source-code verification through the backend.
+
+If the backend is unavailable, the frontend falls back to a random salt so token creation still works. Auto-verification can still happen later through the backend monitor.
 
 ## Verify a project manually
 

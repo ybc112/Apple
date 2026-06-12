@@ -40,6 +40,8 @@ import {
   isLaunchpadConfigured,
   launchpadConfig,
   mintLaunchProject,
+  queueProjectVerification,
+  readLaunchCreatedToken,
   setProjectWhitelistAllowances,
   type WhitelistAllowanceEntry,
   waitForTransactionReceipt,
@@ -131,8 +133,12 @@ const copy = {
     },
     notice: {
       confirmDeploy: '请在钱包里确认部署交易，部署费为 0.005 BNB。',
+      prepareLaunch: '正在请求后端准备靓号合约地址和自动开源任务。',
       txSubmitted: (hash: string) => `部署交易已提交：${hash}，正在等待链上确认。`,
+      txSubmittedWithVanity: (hash: string, suffix: string, token: string) =>
+        `部署交易已提交：${hash}，已匹配尾号 ${suffix}：${token}。`,
       txConfirmed: '交易已确认，项目已经写入链上列表。',
+      txConfirmedWithBackend: (token: string) => `交易已确认，合约 ${token} 已提交后端开源队列。`,
       confirmWhitelist: '请在钱包里确认白名单额度交易。',
       whitelistSubmitted: (hash: string) => `白名单交易已提交：${hash}，正在等待链上确认。`,
       whitelistConfirmed: '白名单额度已写入链上。',
@@ -420,8 +426,12 @@ const copy = {
     },
     notice: {
       confirmDeploy: 'Confirm the deployment transaction in your wallet. The launch fee is 0.005 BNB.',
+      prepareLaunch: 'Preparing the vanity contract address and auto-verification task on the backend.',
       txSubmitted: (hash: string) => `Deployment transaction submitted: ${hash}. Waiting for confirmation.`,
+      txSubmittedWithVanity: (hash: string, suffix: string, token: string) =>
+        `Deployment transaction submitted: ${hash}. Matched suffix ${suffix}: ${token}.`,
       txConfirmed: 'Transaction confirmed. The project is now recorded in the on-chain list.',
+      txConfirmedWithBackend: (token: string) => `Transaction confirmed. Contract ${token} was queued for backend verification.`,
       confirmWhitelist: 'Confirm the whitelist allowance transaction in your wallet.',
       whitelistSubmitted: (hash: string) => `Whitelist transaction submitted: ${hash}. Waiting for confirmation.`,
       whitelistConfirmed: 'Whitelist allowance is now recorded on-chain.',
@@ -1079,7 +1089,10 @@ function App() {
     }
 
     setDeployState('pending')
-    setNotice({ kind: 'info', message: text.notice.confirmDeploy })
+    setNotice({
+      kind: 'info',
+      message: launchpadConfig.backendUrl ? text.notice.prepareLaunch : text.notice.confirmDeploy,
+    })
 
     try {
       const result = await createLaunchToken(
@@ -1097,11 +1110,33 @@ function App() {
       )
 
       setDeployState('sent')
-      setNotice({ kind: 'info', message: text.notice.txSubmitted(shortHash(result.hash)) })
+      setNotice({
+        kind: 'info',
+        message:
+          result.predictedTokenAddress && result.vanitySuffix
+            ? text.notice.txSubmittedWithVanity(
+                shortHash(result.hash),
+                result.vanitySuffix,
+                shortAddress(result.predictedTokenAddress),
+              )
+            : text.notice.txSubmitted(shortHash(result.hash)),
+      })
 
       try {
-        await waitForTransactionReceipt(provider, result.hash, 120_000, language)
-        setNotice({ kind: 'success', message: text.notice.txConfirmed })
+        const receipt = await waitForTransactionReceipt(provider, result.hash, 120_000, language)
+        const tokenAddress = readLaunchCreatedToken(receipt)
+        let verificationQueued = false
+        if (tokenAddress && launchpadConfig.backendUrl) {
+          const verifyResult = await queueProjectVerification(tokenAddress).catch(() => null)
+          verificationQueued = Boolean(verifyResult?.ok)
+        }
+        setNotice({
+          kind: 'success',
+          message:
+            tokenAddress && verificationQueued
+              ? text.notice.txConfirmedWithBackend(shortAddress(tokenAddress))
+              : text.notice.txConfirmed,
+        })
         setProjectsRefreshKey((current) => current + 1)
         navigate('home')
       } catch (error) {

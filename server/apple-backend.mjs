@@ -35,7 +35,11 @@ const backendToken = process.env.APPLE_BACKEND_TOKEN ?? "";
 const autoVerify = process.env.AUTO_VERIFY_PROJECTS !== "false";
 const pollMs = Number(process.env.VERIFY_POLL_MS ?? 30000);
 const backfillCount = Number(process.env.VERIFY_BACKFILL_COUNT ?? 12);
+const rateWindowMs = Number(process.env.APPLE_RATE_WINDOW_MS ?? 60000);
+const verifyRateLimit = Number(process.env.APPLE_VERIFY_RATE_LIMIT ?? 30);
+const vanityRateLimit = Number(process.env.APPLE_VANITY_RATE_LIMIT ?? 6);
 const jobs = new Map();
+const rateBuckets = new Map();
 let lastTokenCount = 0;
 let verifying = false;
 
@@ -68,6 +72,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && url.pathname === "/api/verify-project") {
+      limitRequest(request, "verify", verifyRateLimit);
       requireToken(request);
       const body = await readBody(request);
       const token = normalizeAddress(body.token);
@@ -78,6 +83,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && url.pathname === "/api/vanity-salt") {
+      limitRequest(request, "vanity", vanityRateLimit);
       requireToken(request);
       const body = await readBody(request);
       const result = await findVanitySalt(body);
@@ -318,6 +324,28 @@ function requireToken(request) {
   const header = request.headers.authorization ?? "";
   if (header !== `Bearer ${backendToken}`) {
     throw new Error("Unauthorized.");
+  }
+}
+
+function limitRequest(request, scope, maxRequests) {
+  if (!Number.isFinite(maxRequests) || maxRequests <= 0) {
+    return;
+  }
+
+  const forwardedFor = String(request.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
+  const ip = forwardedFor || request.socket.remoteAddress || "unknown";
+  const key = `${scope}:${ip}`;
+  const now = Date.now();
+  const current = rateBuckets.get(key);
+
+  if (!current || now - current.startedAt > rateWindowMs) {
+    rateBuckets.set(key, { startedAt: now, count: 1 });
+    return;
+  }
+
+  current.count += 1;
+  if (current.count > maxRequests) {
+    throw new Error("Rate limit exceeded. Try again later.");
   }
 }
 
