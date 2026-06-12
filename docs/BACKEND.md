@@ -51,9 +51,9 @@ Then add `public/_redirects`:
 /health  http://154.12.118.163:8787/health  200
 ```
 
-When `VITE_APP_BACKEND_URL` is configured, the launch page asks the backend for a CREATE2 salt before sending the wallet transaction. The frontend also checks that the backend is using the same chain id and Factory address before it allows the deployment to continue. After the transaction confirms, the frontend parses the `LaunchCreated` event and queues the new project for source-code verification through the backend.
+When `VITE_APP_BACKEND_URL` is configured, the launch page asks the backend for a CREATE2 salt before sending the wallet transaction. The frontend checks that the backend is using the same chain id and Factory address before it accepts the returned vanity salt. After the transaction confirms, the frontend parses the `LaunchCreated` event and queues the new project for source-code verification through the backend.
 
-If a vanity suffix is configured and the backend is unavailable or points to a different Factory, token creation is blocked so the token address suffix cannot silently fall back to a random address.
+If a vanity suffix is configured but the backend is unavailable, blocked by the browser, or points to a different Factory, the frontend falls back to a random salt so token creation can still continue. In that fallback path the token may not have the requested vanity suffix.
 
 ## Verify a project manually
 

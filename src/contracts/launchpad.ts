@@ -1037,9 +1037,8 @@ function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLa
 async function resolveLaunchSalt(
   creator: string,
   params: FactoryLaunchParams,
-  locale: LaunchpadLocale,
+  _locale: LaunchpadLocale,
 ) {
-  const text = messages[locale]
   const fallback = {
     salt: hexlify(randomBytes(32)),
     predictedTokenAddress: '',
@@ -1064,12 +1063,12 @@ async function resolveLaunchSalt(
     })
 
     if (!response.ok) {
-      throw new Error(text.vanityUnavailable)
+      return fallback
     }
 
     const result = (await response.json()) as VanitySaltResult
     if (!result.ok || !result.salt || !/^0x[0-9a-fA-F]{64}$/.test(result.salt)) {
-      throw new Error(text.vanityUnavailable)
+      return fallback
     }
     if (
       !result.factory ||
@@ -1077,7 +1076,7 @@ async function resolveLaunchSalt(
       result.factory.toLowerCase() !== launchpadConfig.factoryAddress.toLowerCase() ||
       Number(result.chainId ?? 0) !== launchpadConfig.chainId
     ) {
-      throw new Error(text.vanityUnavailable)
+      return fallback
     }
 
     return {
@@ -1086,12 +1085,8 @@ async function resolveLaunchSalt(
       vanitySuffix: result.suffix ?? launchpadConfig.vanitySuffix,
       vanityAttempts: Number(result.attempts ?? 0),
     }
-  } catch (error) {
-    if (error instanceof Error && error.message === text.vanityUnavailable) {
-      throw error
-    }
-
-    throw new Error(text.vanityUnavailable)
+  } catch {
+    return fallback
   }
 }
 
