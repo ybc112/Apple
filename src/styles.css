@@ -1002,6 +1002,7 @@ a {
     0 18px 42px rgba(109, 255, 197, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
   font-size: 20px;
+  font-weight: 950;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
@@ -1014,12 +1015,22 @@ a {
 }
 
 .mint-panel .submit-button:disabled {
-  color: rgba(255, 255, 255, 0.58);
-  border-color: rgba(104, 164, 154, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: none;
+  opacity: 1;
+  color: #d9fff1;
+  border-color: rgba(141, 247, 196, 0.36);
+  background:
+    linear-gradient(180deg, rgba(141, 247, 196, 0.16), rgba(139, 215, 255, 0.08)),
+    rgba(14, 28, 29, 0.88);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 26px rgba(0, 0, 0, 0.2);
   text-shadow: none;
   transform: none;
+}
+
+.mint-panel .submit-button:disabled svg {
+  color: #8df7c4;
+  stroke-width: 2.4;
 }
 
 .whitelist-manager {
