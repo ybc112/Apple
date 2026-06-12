@@ -50,6 +50,9 @@ const BPS_DENOMINATOR = 10_000n
 const MINT_GAS_BUFFER_BPS = 12_500n
 const GAS_PRICE_BUFFER_BPS = 10_500n
 const NATIVE_MINT_GAS_FLOOR = 4_600_000n
+const MINTED_EVENT_TOPIC = id('Minted(address,uint256,uint256,uint256,uint256,uint256)')
+const LAUNCH_FINALIZED_EVENT_TOPIC = id('LaunchFinalized(uint256)')
+const TRADING_ENABLED_EVENT_TOPIC = id('TradingEnabled()')
 
 export const isLaunchpadConfigured =
   Boolean(launchpadConfig.factoryAddress) &&
@@ -929,6 +932,54 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
   }
 
   return projects
+}
+
+export function watchLaunchProjectEvents(projects: LaunchProject[], onUpdate: () => void) {
+  const watchableProjects = projects.filter(
+    (project) => !project.finalized && isAddress(project.vault) && isAddress(project.token),
+  )
+
+  if (!watchableProjects.length) {
+    return () => {}
+  }
+
+  const provider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
+  provider.pollingInterval = 3_000
+  const listeners: Array<{ filter: { address: string; topics: string[] }; handler: () => void }> = []
+  let refreshTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+
+  const scheduleUpdate = () => {
+    if (refreshTimer) {
+      return
+    }
+
+    refreshTimer = globalThis.setTimeout(() => {
+      refreshTimer = null
+      onUpdate()
+    }, 600)
+  }
+
+  const addListener = (address: string, topic: string) => {
+    const filter = { address, topics: [topic] }
+    provider.on(filter, scheduleUpdate)
+    listeners.push({ filter, handler: scheduleUpdate })
+  }
+
+  for (const project of watchableProjects) {
+    addListener(project.vault, MINTED_EVENT_TOPIC)
+    addListener(project.vault, LAUNCH_FINALIZED_EVENT_TOPIC)
+    addListener(project.token, TRADING_ENABLED_EVENT_TOPIC)
+  }
+
+  return () => {
+    if (refreshTimer) {
+      globalThis.clearTimeout(refreshTimer)
+    }
+    for (const listener of listeners) {
+      provider.off(listener.filter, listener.handler)
+    }
+    provider.destroy()
+  }
 }
 
 function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLaunchParams {

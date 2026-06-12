@@ -20,7 +20,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { isAddress } from 'ethers'
 import {
   BNB_CHAIN,
@@ -46,6 +46,7 @@ import {
   setProjectWhitelistAllowances,
   type WhitelistAllowanceEntry,
   waitForTransactionReceipt,
+  watchLaunchProjectEvents,
 } from './contracts/launchpad'
 import {
   PANCAKE_V2_ROUTER_ADDRESS,
@@ -821,6 +822,9 @@ function App() {
   )
   const unallocated = Math.max(0, 100 - allocationTotal)
   const onTargetNetwork = wallet.chainId.toLowerCase() === targetChainId
+  const refreshProjects = useCallback(() => {
+    setProjectsRefreshKey((current) => current + 1)
+  }, [])
 
   useEffect(() => {
     document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
@@ -847,7 +851,7 @@ function App() {
       }
     }
 
-    setProjectsStatus('loading')
+    setProjectsStatus((current) => (current === 'ready' ? current : 'loading'))
     setProjectsError('')
 
     fetchLaunchProjects(wallet.account)
@@ -873,6 +877,20 @@ function App() {
       active = false
     }
   }, [projectsRefreshKey, wallet.account])
+
+  useEffect(() => {
+    if (!isLaunchpadConfigured || !projects.some((project) => !project.finalized)) {
+      return
+    }
+
+    const stopWatching = watchLaunchProjectEvents(projects, refreshProjects)
+    const fallbackTimer = window.setInterval(refreshProjects, 15_000)
+
+    return () => {
+      stopWatching()
+      window.clearInterval(fallbackTimer)
+    }
+  }, [projects, refreshProjects])
 
   useEffect(() => {
     let active = true
