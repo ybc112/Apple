@@ -199,7 +199,7 @@ async function findVanitySalt(body) {
 
   const creator = normalizeAddress(body.creator);
   const params = normalizeLaunchParams(body.params ?? {});
-  const maxIterations = Math.min(Number(body.maxIterations ?? 120000), 500000);
+  const maxIterations = Math.min(Number(body.maxIterations ?? 500000), 2000000);
   const tokenFactory = new ContractFactory(tokenArtifact.abi, tokenArtifact.bytecode);
   const rewardToken = params.rewardToken === ZeroAddress ? process.env.DEFAULT_REWARD_TOKEN ?? "0x55d398326f99059fF775485246999027B3197955" : params.rewardToken;
   const platformFeeReceiver = getAddress(await factory.feeRecipient());

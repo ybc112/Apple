@@ -46,6 +46,11 @@ const hiddenProjectShortMatches = [
   { prefix: '0x6b1d', suffix: 'e701' },
 ]
 
+const BPS_DENOMINATOR = 10_000n
+const MINT_GAS_BUFFER_BPS = 18_000n
+const GAS_PRICE_BUFFER_BPS = 12_000n
+const NATIVE_MINT_GAS_FLOOR = 8_000_000n
+
 export const isLaunchpadConfigured =
   Boolean(launchpadConfig.factoryAddress) &&
   isAddress(launchpadConfig.factoryAddress) &&
@@ -190,6 +195,7 @@ const messages = {
     invalidMintQuantity: 'Mint 数量必须是大于 0 的整数。',
     invalidPaymentToken: '付款代币地址无效。',
     mintEstimateFailed: '当前无法预估 Mint Gas。请确认白名单额度、公开阶段是否已开放、钱包余额是否足够，并刷新页面后重试。',
+    vanityUnavailable: '本次没有匹配到 AAAA 靓号地址，请重新点击部署再试一次。',
   },
   en: {
     factoryMissing: 'Launch Factory is not configured. Deploy the Factory and set VITE_LAUNCHPAD_FACTORY_ADDRESS first.',
@@ -220,6 +226,7 @@ const messages = {
     invalidMintQuantity: 'Mint quantity must be an integer greater than 0.',
     invalidPaymentToken: 'Payment token address is invalid.',
     mintEstimateFailed: 'Unable to estimate mint gas. Check whitelist allowance, public phase status, wallet balance, then refresh and try again.',
+    vanityUnavailable: 'Could not match an AAAA vanity address this time. Click deploy again to retry.',
   },
 } as const
 
@@ -248,7 +255,7 @@ export async function createLaunchToken(
 
   const params = toFactoryParams(draft, locale)
   const iface = new Interface(launchFactoryAbi)
-  const vanity = await resolveLaunchSalt(from, params)
+  const vanity = await resolveLaunchSalt(from, params, locale)
   const salt = vanity.salt
   const data = iface.encodeFunctionData('createLaunch', [params, salt])
 
@@ -618,16 +625,35 @@ export async function mintLaunchProject(
     value: project.paymentToken.toLowerCase() === ZeroAddress ? toBeHex(cost) : '0x0',
     data,
   }
-  let gas: string | undefined
+  const isNativeMint = project.paymentToken.toLowerCase() === ZeroAddress
+  let gas: string
+  let gasPrice: string | undefined
 
   try {
-    const estimatedGas = BigInt(String(await provider.request({
-      method: 'eth_estimateGas',
-      params: [tx],
-    })))
-    gas = toBeHex((estimatedGas * 180n) / 100n)
+    await assertMintCanExecute(provider, tx)
   } catch {
     throw new Error(text.mintEstimateFailed)
+  }
+
+  try {
+    const estimatedGas = await estimateMintGas(provider, tx)
+    const bufferedGas = (estimatedGas * MINT_GAS_BUFFER_BPS) / BPS_DENOMINATOR
+    const nativeGas = isNativeMint && bufferedGas < NATIVE_MINT_GAS_FLOOR
+      ? NATIVE_MINT_GAS_FLOOR
+      : bufferedGas
+    gas = toBeHex(nativeGas)
+  } catch {
+    if (!isNativeMint) {
+      throw new Error(text.mintEstimateFailed)
+    }
+    gas = toBeHex(NATIVE_MINT_GAS_FLOOR)
+  }
+
+  try {
+    const currentGasPrice = BigInt(String(await provider.request({ method: 'eth_gasPrice' })))
+    gasPrice = toBeHex((currentGasPrice * GAS_PRICE_BUFFER_BPS) / BPS_DENOMINATOR)
+  } catch {
+    gasPrice = undefined
   }
 
   const hash = (await provider.request({
@@ -635,12 +661,44 @@ export async function mintLaunchProject(
     params: [
       {
         ...tx,
-        ...(gas ? { gas } : {}),
+        gas,
+        ...(gasPrice ? { gasPrice } : {}),
       },
     ],
   })) as string
 
   return { hash }
+}
+
+async function assertMintCanExecute(
+  provider: EthereumProvider,
+  tx: { from: string; to: string; value: string; data: string },
+) {
+  try {
+    await provider.request({
+      method: 'eth_call',
+      params: [tx, 'latest'],
+    })
+    return
+  } catch {
+    const rpcProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
+    await rpcProvider.send('eth_call', [tx, 'latest'])
+  }
+}
+
+async function estimateMintGas(
+  provider: EthereumProvider,
+  tx: { from: string; to: string; value: string; data: string },
+) {
+  try {
+    return BigInt(String(await provider.request({
+      method: 'eth_estimateGas',
+      params: [tx],
+    })))
+  } catch {
+    const rpcProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
+    return BigInt(String(await rpcProvider.send('eth_estimateGas', [tx])))
+  }
 }
 
 export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]> {
@@ -829,7 +887,12 @@ function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLa
   }
 }
 
-async function resolveLaunchSalt(creator: string, params: FactoryLaunchParams) {
+async function resolveLaunchSalt(
+  creator: string,
+  params: FactoryLaunchParams,
+  locale: LaunchpadLocale,
+) {
+  const text = messages[locale]
   const fallback = {
     salt: hexlify(randomBytes(32)),
     predictedTokenAddress: '',
@@ -847,18 +910,19 @@ async function resolveLaunchSalt(creator: string, params: FactoryLaunchParams) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         suffix: launchpadConfig.vanitySuffix,
+        maxIterations: 500000,
         creator,
         params: serializeFactoryParams(params),
       }),
     })
 
     if (!response.ok) {
-      return fallback
+      throw new Error(text.vanityUnavailable)
     }
 
     const result = (await response.json()) as VanitySaltResult
     if (!result.ok || !result.salt || !/^0x[0-9a-fA-F]{64}$/.test(result.salt)) {
-      return fallback
+      throw new Error(text.vanityUnavailable)
     }
 
     return {
@@ -867,8 +931,12 @@ async function resolveLaunchSalt(creator: string, params: FactoryLaunchParams) {
       vanitySuffix: result.suffix ?? launchpadConfig.vanitySuffix,
       vanityAttempts: Number(result.attempts ?? 0),
     }
-  } catch {
-    return fallback
+  } catch (error) {
+    if (error instanceof Error && error.message === text.vanityUnavailable) {
+      throw error
+    }
+
+    throw new Error(text.vanityUnavailable)
   }
 }
 

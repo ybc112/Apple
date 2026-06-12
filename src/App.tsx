@@ -3020,6 +3020,10 @@ function LaunchPage({
                 <dd>{isConfigured ? shortAddress(launchpadConfig.factoryAddress) : text.launch.factoryUnset}</dd>
               </div>
               <div>
+                <dt>{language === 'zh' ? '新项目尾号' : 'Vanity suffix'}</dt>
+                <dd>{launchpadConfig.vanitySuffix ? launchpadConfig.vanitySuffix.toUpperCase() : 'AAAA'}</dd>
+              </div>
+              <div>
                 <dt>{text.launch.deployFee}</dt>
                 <dd>0.005 BNB</dd>
               </div>
