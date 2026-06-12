@@ -362,7 +362,6 @@ contract AppleToken is ERC20, Ownable {
     error NotLaunchVault();
     error InvalidMintPayment();
     error PairAlreadySet();
-    error RewardTokenLocked();
     error RouterAlreadySet();
     error TradingLocked();
     error VaultAlreadySet();
@@ -398,10 +397,8 @@ contract AppleToken is ERC20, Ownable {
 
     event LaunchVaultSet(address indexed vault);
     event LiquidityRouterSet(address indexed router);
-    event ReceiverUpdated(address indexed receiver);
-    event DividendReceiverUpdated(address indexed dividendReceiver);
-    event RewardConfigUpdated(address indexed rewardToken, uint256 rewardThreshold);
     event TradingEnabled();
+    event DistributorGasUpdated(uint256 gasLimit);
     event AdvancedTaxUpdated(
         uint16 transferTaxBps,
         uint16 addLiquidityTaxBps,
@@ -409,8 +406,6 @@ contract AppleToken is ERC20, Ownable {
         uint16 launchProtectionTaxBps,
         uint16 launchProtectionBlocks
     );
-    event SwapSettingsUpdated(bool enabled, uint256 threshold);
-    event DistributorGasUpdated(uint256 gasLimit);
     event TaxConfigUpdated(
         uint16 buyTaxBps,
         uint16 sellTaxBps,
@@ -424,8 +419,6 @@ contract AppleToken is ERC20, Ownable {
         uint16 dividendFeeBps,
         uint16 burnFeeBps
     );
-    event TaxExemptUpdated(address indexed account, bool enabled);
-    event DividendExemptUpdated(address indexed account, bool enabled);
     event AutomatedMarketMakerPairUpdated(address indexed pair, bool enabled);
     event TaxCollected(
         address indexed from,
@@ -614,20 +607,68 @@ contract AppleToken is ERC20, Ownable {
         return dividendDistributor.getUnpaidEarnings(account);
     }
 
-    function minimumTokenBalanceForDividends() external view returns (uint256) {
-        return rewardThreshold;
-    }
-
-    function claimWait() external view returns (uint256) {
-        return dividendDistributor.claimWait();
-    }
-
     function _mainPair() external view returns (address) {
         return liquidityPair;
     }
 
     function _swapPairList(address pair) external view returns (bool) {
         return automatedMarketMakerPairs[pair];
+    }
+
+    function _buyFundFee() external view returns (uint256) {
+        return _taxPortion(buyTaxBps, _marketingSplitBps());
+    }
+
+    function _buyLPFee() external view returns (uint256) {
+        return _taxPortion(buyTaxBps, lpFeeBps);
+    }
+
+    function _buyRewardFee() external view returns (uint256) {
+        return _taxPortion(buyTaxBps, dividendFeeBps);
+    }
+
+    function _buyHoldRewardFee() external pure returns (uint256) {
+        return 0;
+    }
+
+    function buy_burnFee() external view returns (uint256) {
+        return _taxPortion(buyTaxBps, burnFeeBps);
+    }
+
+    function _sellFundFee() external view returns (uint256) {
+        return _taxPortion(sellTaxBps, _marketingSplitBps());
+    }
+
+    function _sellLPFee() external view returns (uint256) {
+        return _taxPortion(sellTaxBps, lpFeeBps);
+    }
+
+    function _sellRewardFee() external view returns (uint256) {
+        return _taxPortion(sellTaxBps, dividendFeeBps);
+    }
+
+    function _sellHoldRewardFee() external pure returns (uint256) {
+        return 0;
+    }
+
+    function sell_burnFee() external view returns (uint256) {
+        return _taxPortion(sellTaxBps, burnFeeBps);
+    }
+
+    function transferFee() external view returns (uint256) {
+        return transferTaxBps;
+    }
+
+    function addLiquidityFee() external view returns (uint256) {
+        return addLiquidityTaxBps;
+    }
+
+    function removeLiquidityFee() external view returns (uint256) {
+        return removeLiquidityTaxBps;
+    }
+
+    function dividendTaxFee() external pure returns (uint256) {
+        return PLATFORM_TAX_SHARE_BPS;
     }
 
     function isAddV2() external view returns (bool) {
@@ -638,100 +679,13 @@ contract AppleToken is ERC20, Ownable {
         return _isRemoveLiquidity(liquidityPair);
     }
 
-    function setTaxes(TaxConfig calldata taxConfig) external onlyOwner {
-        _setTaxes(taxConfig);
-    }
-
-    function setReceiver(address nextReceiver) external onlyOwner {
-        if (nextReceiver == address(0)) {
-            revert ZeroAddress();
-        }
-
-        receiver = nextReceiver;
-        emit ReceiverUpdated(nextReceiver);
-    }
-
-    function setDividendReceiver(address nextDividendReceiver) external onlyOwner {
-        if (nextDividendReceiver == address(0)) {
-            revert ZeroAddress();
-        }
-
-        dividendReceiver = nextDividendReceiver;
-        emit DividendReceiverUpdated(nextDividendReceiver);
-    }
-
-    function setRewardConfig(address nextRewardToken, uint256 nextRewardThreshold) external onlyOwner {
-        if (nextRewardToken == address(0)) {
-            revert ZeroAddress();
-        }
-        if (nextRewardToken != rewardToken) {
-            revert RewardTokenLocked();
-        }
-
-        rewardThreshold = nextRewardThreshold;
-        emit RewardConfigUpdated(nextRewardToken, nextRewardThreshold);
-    }
-
-    function setAdvancedTax(
-        uint16 nextTransferTaxBps,
-        uint16 nextAddLiquidityTaxBps,
-        uint16 nextRemoveLiquidityTaxBps,
-        uint16 nextLaunchProtectionTaxBps,
-        uint16 nextLaunchProtectionBlocks,
-        uint32 nextClaimWait
-    )
-        external
-        onlyOwner
-    {
-        _setAdvancedTax(
-            nextTransferTaxBps,
-            nextAddLiquidityTaxBps,
-            nextRemoveLiquidityTaxBps,
-            nextLaunchProtectionTaxBps,
-            nextLaunchProtectionBlocks,
-            nextClaimWait
-        );
-    }
-
-    function setSwapSettings(bool enabled, uint256 threshold) external onlyOwner {
-        swapEnabled = enabled;
-        swapThreshold = threshold;
-        emit SwapSettingsUpdated(enabled, threshold);
+    function processTaxTokens() external {
+        _swapBackIfNeeded();
     }
 
     function setDistributorGas(uint256 gasLimit) external onlyOwner {
         distributorGas = gasLimit;
         emit DistributorGasUpdated(gasLimit);
-    }
-
-    function setTaxExempt(address account, bool enabled) external onlyOwner {
-        isTaxExempt[account] = enabled;
-        emit TaxExemptUpdated(account, enabled);
-    }
-
-    function setDividendExempt(address account, bool enabled) external onlyOwner {
-        isDividendExempt[account] = enabled;
-        if (enabled) {
-            dividendDistributor.excludeFromDividends(account);
-        } else {
-            dividendDistributor.includeInDividends(account, _eligibleDividendBalance(account));
-        }
-        emit DividendExemptUpdated(account, enabled);
-    }
-
-    function setAutomatedMarketMakerPair(address pair, bool enabled) external onlyOwner {
-        automatedMarketMakerPairs[pair] = enabled;
-        isDividendExempt[pair] = enabled;
-        if (enabled) {
-            dividendDistributor.excludeFromDividends(pair);
-        } else {
-            dividendDistributor.includeInDividends(pair, _eligibleDividendBalance(pair));
-        }
-        emit AutomatedMarketMakerPairUpdated(pair, enabled);
-    }
-
-    function processTaxTokens() external {
-        _swapBackIfNeeded();
     }
 
     function _setTaxes(TaxConfig memory taxConfig) private {
@@ -964,6 +918,14 @@ contract AppleToken is ERC20, Ownable {
         if ((fromPair || toPair) && _inLaunchProtection() && launchProtectionTaxBps > taxBps) {
             taxBps = launchProtectionTaxBps;
         }
+    }
+
+    function _taxPortion(uint16 taxBps, uint256 splitBps) private pure returns (uint256) {
+        return (uint256(taxBps) * splitBps) / BPS_DENOMINATOR;
+    }
+
+    function _marketingSplitBps() private view returns (uint256) {
+        return BPS_DENOMINATOR - uint256(lpFeeBps) - dividendFeeBps - burnFeeBps;
     }
 
     function _inLaunchProtection() private view returns (bool) {

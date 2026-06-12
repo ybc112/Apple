@@ -154,6 +154,22 @@ describe("AppleLaunchFactory", function () {
     expect(await token._mainPair()).to.equal(launchPair);
     expect(await token.automatedMarketMakerPairs(launchPair)).to.equal(true);
     expect(await token._swapPairList(launchPair)).to.equal(true);
+    const marketingSplitBps = 10000n
+      - BigInt(params.lpFeeBps)
+      - BigInt(params.dividendFeeBps)
+      - BigInt(params.burnFeeBps);
+    expect(await token._buyFundFee()).to.equal(BigInt(params.buyTaxBps) * marketingSplitBps / 10000n);
+    expect(await token._buyLPFee()).to.equal(BigInt(params.buyTaxBps) * BigInt(params.lpFeeBps) / 10000n);
+    expect(await token._buyRewardFee()).to.equal(BigInt(params.buyTaxBps) * BigInt(params.dividendFeeBps) / 10000n);
+    expect(await token.buy_burnFee()).to.equal(BigInt(params.buyTaxBps) * BigInt(params.burnFeeBps) / 10000n);
+    expect(await token._sellFundFee()).to.equal(BigInt(params.sellTaxBps) * marketingSplitBps / 10000n);
+    expect(await token._sellLPFee()).to.equal(BigInt(params.sellTaxBps) * BigInt(params.lpFeeBps) / 10000n);
+    expect(await token._sellRewardFee()).to.equal(BigInt(params.sellTaxBps) * BigInt(params.dividendFeeBps) / 10000n);
+    expect(await token.sell_burnFee()).to.equal(BigInt(params.sellTaxBps) * BigInt(params.burnFeeBps) / 10000n);
+    expect(await token.transferFee()).to.equal(BigInt(params.transferTaxBps));
+    expect(await token.addLiquidityFee()).to.equal(BigInt(params.addLiquidityTaxBps));
+    expect(await token.removeLiquidityFee()).to.equal(BigInt(params.removeLiquidityTaxBps));
+    expect(await token.dividendTaxFee()).to.equal(await token.PLATFORM_TAX_SHARE_BPS());
     expect(await token.rewardToken()).to.equal(await factory.DEFAULT_REWARD_TOKEN());
     expect(await token.balanceOf(project.vault)).to.equal(params.totalSupply);
     expect(await vault.tokensForSale()).to.equal(params.totalSupply / 2n);
@@ -380,8 +396,6 @@ describe("AppleLaunchFactory", function () {
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
 
     await vault.connect(creator).setWhitelistAllowance(buyer.address, 1n);
-    await token.connect(creator).setDividendReceiver(dividendReceiver.address);
-    await token.connect(creator).setAutomatedMarketMakerPair(pair.address, true);
     await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
 
     expect(await token.owner()).to.equal(await token.LP_BLACK_HOLE());
@@ -466,7 +480,6 @@ describe("AppleLaunchFactory", function () {
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
     const tokensPerMint = await vault.tokensPerMint();
 
-    await token.connect(creator).setAutomatedMarketMakerPair(pair.address, true);
     await vault.connect(buyer).mint(1n, { value: params.mintPrice });
 
     let locked = false;
@@ -749,15 +762,14 @@ describe("AppleLaunchFactory", function () {
 
     await owner.sendTransaction({
       to: await router.getAddress(),
-      value: ethers.parseEther("100"),
+      value: ethers.parseEther("2000"),
     });
-    await token.connect(creator).setSwapSettings(true, 1n);
     await token.connect(creator).setDistributorGas(0n);
     await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
 
     const pairAddress = await getLiquidityPair(router, tokenAddress);
     const pair = await ethers.getContractAt("MockPancakePair", pairAddress);
-    const transferAmount = ethers.parseUnits("1", 18);
+    const transferAmount = ethers.parseUnits("1000", 18);
     const fee = (transferAmount * BigInt(params.sellTaxBps)) / 10000n;
     const platformAmount = (fee * BigInt(await token.PLATFORM_TAX_SHARE_BPS())) / 10000n;
     const projectFee = fee - platformAmount;
@@ -834,14 +846,13 @@ describe("AppleLaunchFactory", function () {
 
     await owner.sendTransaction({
       to: await router.getAddress(),
-      value: ethers.parseEther("100"),
+      value: ethers.parseEther("2000"),
     });
-    await token.connect(creator).setSwapSettings(true, 1n);
     await token.connect(creator).setDistributorGas(0n);
     await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
 
     const pairAddress = await getLiquidityPair(router, tokenAddress);
-    const transferAmount = ethers.parseUnits("1", 18);
+    const transferAmount = ethers.parseUnits("1000", 18);
     const fee = (transferAmount * BigInt(params.sellTaxBps)) / 10000n;
     const pairTokenBefore = await token.balanceOf(pairAddress);
 
@@ -1016,10 +1027,9 @@ describe("AppleLaunchFactory", function () {
     const token = await ethers.getContractAt("AppleToken", tokenAddress);
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
 
-    await token.connect(creator).setSwapSettings(false, 1n);
     await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
 
-    const addAmount = ethers.parseUnits("1000", 18);
+    const addAmount = ethers.parseUnits("100", 18);
     const fee = (addAmount * BigInt(params.addLiquidityTaxBps)) / 10000n;
     await token.connect(buyer).approve(await router.getAddress(), addAmount);
     await router.connect(buyer).addLiquidityETH(
@@ -1061,7 +1071,6 @@ describe("AppleLaunchFactory", function () {
       to: await router.getAddress(),
       value: ethers.parseEther("100"),
     });
-    await token.connect(creator).setSwapSettings(true, 1n);
     await token.connect(creator).setDistributorGas(0n);
 
     await vault.connect(buyerA).mint(1n, { value: params.mintPrice });
