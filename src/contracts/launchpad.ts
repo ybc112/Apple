@@ -178,6 +178,8 @@ type VanitySaltResult = {
   suffix?: string
   salt?: string
   tokenAddress?: string
+  factory?: string
+  chainId?: number
   attempts?: number
 }
 
@@ -1004,6 +1006,14 @@ async function resolveLaunchSalt(
 
     const result = (await response.json()) as VanitySaltResult
     if (!result.ok || !result.salt || !/^0x[0-9a-fA-F]{64}$/.test(result.salt)) {
+      throw new Error(text.vanityUnavailable)
+    }
+    if (
+      !result.factory ||
+      !isAddress(result.factory) ||
+      result.factory.toLowerCase() !== launchpadConfig.factoryAddress.toLowerCase() ||
+      Number(result.chainId ?? 0) !== launchpadConfig.chainId
+    ) {
       throw new Error(text.vanityUnavailable)
     }
 

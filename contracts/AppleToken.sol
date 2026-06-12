@@ -38,6 +38,7 @@ interface IAppleTaxRouter {
 }
 
 interface IAppleLaunchMintVault {
+    function mintPrice() external view returns (uint256);
     function mintFor(address minter, uint256 quantity) external payable;
 }
 
@@ -495,7 +496,17 @@ contract AppleToken is ERC20, Ownable {
         _mint(initialHolder, launchConfig.totalSupply);
     }
 
-    receive() external payable {}
+    receive() external payable {
+        if (_swapping || msg.sender == address(liquidityRouter)) {
+            return;
+        }
+        if (launchVault == address(0) || paymentToken != address(0)) {
+            revert ZeroAddress();
+        }
+
+        IAppleLaunchMintVault mintVault = IAppleLaunchMintVault(launchVault);
+        mintVault.mintFor{ value: msg.value }(msg.sender, msg.value / mintVault.mintPrice());
+    }
 
     function setLaunchVault(address vault) external onlyOwner {
         if (vault == address(0)) {

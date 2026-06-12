@@ -21,7 +21,7 @@ Required environment:
 ```bash
 BSC_RPC_URL=https://bsc.publicnode.com
 BSCSCAN_API_KEY=your_bscscan_key
-FACTORY_ADDRESS=0xaF8Cf01201077D347351b672ebb6C66cACF9e44a
+APPLE_FACTORY_ADDRESS=0xaF8Cf01201077D347351b672ebb6C66cACF9e44a
 APPLE_BACKEND_PORT=8787
 AUTO_VERIFY_PROJECTS=true
 APPLE_CORS_ORIGIN=https://your-frontend.example
@@ -51,9 +51,9 @@ Then add `public/_redirects`:
 /health  http://154.12.118.163:8787/health  200
 ```
 
-When `VITE_APP_BACKEND_URL` is configured, the launch page asks the backend for a CREATE2 salt before sending the wallet transaction. After the transaction confirms, the frontend parses the `LaunchCreated` event and queues the new project for source-code verification through the backend.
+When `VITE_APP_BACKEND_URL` is configured, the launch page asks the backend for a CREATE2 salt before sending the wallet transaction. The frontend also checks that the backend is using the same chain id and Factory address before it allows the deployment to continue. After the transaction confirms, the frontend parses the `LaunchCreated` event and queues the new project for source-code verification through the backend.
 
-If the backend is unavailable, the frontend falls back to a random salt so token creation still works. Auto-verification can still happen later through the backend monitor.
+If a vanity suffix is configured and the backend is unavailable or points to a different Factory, token creation is blocked so the token address suffix cannot silently fall back to a random address.
 
 ## Verify a project manually
 

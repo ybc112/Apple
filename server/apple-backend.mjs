@@ -26,7 +26,10 @@ const tokenArtifact = readJson("artifacts/contracts/AppleToken.sol/AppleToken.js
 const chainId = Number(process.env.APPLE_CHAIN_ID ?? deployment.chainId ?? 56);
 const rpcUrl = process.env.BSC_RPC_URL ?? process.env.APPLE_RPC_URL ?? "https://bsc.publicnode.com";
 const factoryAddress = getAddress(
-  process.env.FACTORY_ADDRESS ?? process.env.VITE_LAUNCHPAD_FACTORY_ADDRESS ?? deployment.factory,
+  process.env.APPLE_FACTORY_ADDRESS
+    ?? deployment.factory
+    ?? process.env.FACTORY_ADDRESS
+    ?? process.env.VITE_LAUNCHPAD_FACTORY_ADDRESS,
 );
 const provider = new JsonRpcProvider(rpcUrl, chainId);
 const factory = new Contract(factoryAddress, factoryArtifact.abi, provider);
@@ -250,6 +253,8 @@ async function findVanitySalt(body) {
         salt,
         tokenSalt,
         tokenAddress,
+        factory: factoryAddress,
+        chainId,
         attempts,
         elapsedMs: Date.now() - startedAt,
       };
@@ -259,6 +264,8 @@ async function findVanitySalt(body) {
   return {
     ok: false,
     suffix,
+    factory: factoryAddress,
+    chainId,
     attempts: maxIterations,
     elapsedMs: Date.now() - startedAt,
   };

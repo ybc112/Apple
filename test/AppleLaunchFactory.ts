@@ -617,6 +617,46 @@ describe("AppleLaunchFactory", function () {
     expect(await token.balanceOf(buyer.address)).to.equal((await vault.tokensPerMint()) * 2n);
   });
 
+  it("lets direct BNB transfers to the token mint whitelist and public slots", async function () {
+    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 3n,
+      whitelistMintCount: 1n,
+      whitelistEnabled: true,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-direct-token-mint"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+    const tokensPerMint = await vault.tokensPerMint();
+
+    await vault.connect(creator).setWhitelistAllowance(buyer.address, 1n);
+    await buyer.sendTransaction({
+      to: tokenAddress,
+      value: params.mintPrice,
+    });
+
+    expect(await vault.whitelistMintedCount()).to.equal(1n);
+    expect(await token.balanceOf(buyer.address)).to.equal(tokensPerMint);
+
+    await dividendReceiver.sendTransaction({
+      to: tokenAddress,
+      value: params.mintPrice * 2n,
+    });
+
+    expect(await vault.publicMintedCount()).to.equal(2n);
+    expect(await vault.mintedCount()).to.equal(3n);
+    expect(await token.balanceOf(dividendReceiver.address)).to.equal(
+      (await vault.tokensForSale()) - tokensPerMint,
+    );
+  });
+
   it("charges wallet transfer tax separately from buy and sell tax", async function () {
     const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
     const params = {
