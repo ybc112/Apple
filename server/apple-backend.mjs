@@ -82,10 +82,7 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (
-      request.method === "GET"
-        && (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/api/assets/"))
-    ) {
+    if (request.method === "GET" && url.pathname.startsWith("/api/assets/")) {
       await sendAsset(response, url.pathname);
       return;
     }
