@@ -27,7 +27,7 @@ const DEFAULT_APP_BACKEND_URL = 'https://apple-qy1h.onrender.com'
 const configuredBackendUrl =
   String(import.meta.env.VITE_APP_BACKEND_URL ?? '').trim() || DEFAULT_APP_BACKEND_URL
 
-export const DEFAULT_LAUNCHPAD_FACTORY_ADDRESS = '0x1aaB224fDb05bAC96d49557c8928e21Fc5Cbb28a'
+export const DEFAULT_LAUNCHPAD_FACTORY_ADDRESS = '0xF8EdD7fCB9392C8EC6b32049155C543E2eb6bBf5'
 export const DEFAULT_AUDIT_REGISTRY_ADDRESS = '0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084'
 const DEFAULT_CREATION_FEE_WEI = '5000000000000000'
 
@@ -170,6 +170,7 @@ type FactoryLaunchParams = {
 
 type ProjectMetadata = {
   description?: string
+  avatar?: string
   website?: string
   telegram?: string
   x?: string
@@ -938,6 +939,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       name: String(name),
       symbol: String(symbol),
       description: metadata.description || '链上发射项目',
+      avatar: metadata.avatar || '',
       website: metadata.website || '',
       telegram: metadata.telegram || '',
       xLink: metadata.x || metadata.xLink || '',

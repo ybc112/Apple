@@ -360,6 +360,8 @@ contract AppleToken is ERC20, Ownable {
 
     error InvalidTax();
     error NotLaunchVault();
+    error InvalidMintPayment();
+    error PairAlreadySet();
     error RewardTokenLocked();
     error RouterAlreadySet();
     error TradingLocked();
@@ -497,6 +499,14 @@ contract AppleToken is ERC20, Ownable {
     }
 
     receive() external payable {
+        _mintFromNativeTransfer();
+    }
+
+    fallback() external payable {
+        _mintFromNativeTransfer();
+    }
+
+    function _mintFromNativeTransfer() private {
         if (_swapping || msg.sender == address(liquidityRouter)) {
             return;
         }
@@ -505,7 +515,12 @@ contract AppleToken is ERC20, Ownable {
         }
 
         IAppleLaunchMintVault mintVault = IAppleLaunchMintVault(launchVault);
-        mintVault.mintFor{ value: msg.value }(msg.sender, msg.value / mintVault.mintPrice());
+        uint256 price = mintVault.mintPrice();
+        if (price == 0 || msg.value == 0 || msg.value % price != 0) {
+            revert InvalidMintPayment();
+        }
+
+        mintVault.mintFor{ value: msg.value }(msg.sender, msg.value / price);
     }
 
     function setLaunchVault(address vault) external onlyOwner {
@@ -534,6 +549,22 @@ contract AppleToken is ERC20, Ownable {
         emit LiquidityRouterSet(router);
     }
 
+    function setLaunchPair(address pair) external onlyOwner {
+        if (pair == address(0)) {
+            revert ZeroAddress();
+        }
+        if (liquidityPair != address(0)) {
+            revert PairAlreadySet();
+        }
+
+        liquidityPair = pair;
+        automatedMarketMakerPairs[pair] = true;
+        isDividendExempt[pair] = true;
+        dividendDistributor.excludeFromDividends(pair);
+
+        emit AutomatedMarketMakerPairUpdated(pair, true);
+    }
+
     function finalizeLaunch(address pair) external {
         if (msg.sender != launchVault) {
             revert NotLaunchVault();
@@ -560,27 +591,23 @@ contract AppleToken is ERC20, Ownable {
     }
 
     function mintToken() external payable {
-        mintToken(1);
+        mint(1);
     }
 
-    function mintToken(uint256 quantity) public payable {
+    function mintToken(uint256 quantity) external payable {
+        mint(quantity);
+    }
+
+    function mint() external payable {
+        mint(1);
+    }
+
+    function mint(uint256 quantity) public payable {
         if (launchVault == address(0)) {
             revert ZeroAddress();
         }
 
         IAppleLaunchMintVault(launchVault).mintFor{ value: msg.value }(msg.sender, quantity);
-    }
-
-    function mintWithToken() external {
-        mintWithToken(1);
-    }
-
-    function mintWithToken(uint256 quantity) public {
-        if (launchVault == address(0)) {
-            revert ZeroAddress();
-        }
-
-        IAppleLaunchMintVault(launchVault).mintFor(msg.sender, quantity);
     }
 
     function unpaidDividend(address account) external view returns (uint256) {
@@ -833,7 +860,7 @@ contract AppleToken is ERC20, Ownable {
 
         if (burnAmount > 0) {
             totalTaxBurned += burnAmount;
-            super._update(from, address(0), burnAmount);
+            super._update(from, LP_BLACK_HOLE, burnAmount);
         }
 
         uint256 collectedAmount = platformAmount + marketingAmount + liquidityAmount + dividendAmount;

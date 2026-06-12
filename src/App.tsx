@@ -9,13 +9,16 @@ import {
   FileCode2,
   Globe2,
   Home,
+  ImagePlus,
   Languages,
   Menu,
   MessageCircle,
+  Plus,
   Rocket,
   Search,
   Send,
   ShieldCheck,
+  Trash2,
   UserPlus,
   Wallet,
   X,
@@ -108,10 +111,15 @@ type ProjectsStatus = 'idle' | 'loading' | 'ready' | 'error'
 type ProjectFilter = 'all' | 'minting' | 'whitelist' | 'completed'
 
 const defaultDescriptions: Record<Language, string> = {
-  zh: initialForm.description,
-  en:
-    'Apple Seed Launch: an on-chain launch experiment for communities, with an independent token, mint vault, public minting, and key parameters recorded on-chain.',
+  zh: '',
+  en: '',
 }
+
+const avatarAcceptedTypes = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/gif', 'image/webp']
+const avatarAccept = avatarAcceptedTypes.join(',')
+const avatarMaxSourceBytes = 1024 * 1024
+const avatarMaxMetadataBytes = 220 * 1024
+const avatarCanvasSize = 256
 
 const copy = {
   zh: {
@@ -316,11 +324,23 @@ const copy = {
       factoryUnset: '未配置',
       section01: '01 基础信息',
       title: '部署你的发射代币',
-      intro: '填写品牌名称、符号、简介、付款代币、mint 价格和项目接收钱包。',
+      intro: '填写名称、符号、头像和项目简介。',
       feeBadge: '部署费 0.005 BNB',
       tokenName: '代币名称',
+      tokenNamePlaceholder: '输入代币名称',
       tokenSymbol: '代币符号',
-      description: '项目介绍',
+      tokenSymbolPlaceholder: '输入代币符号',
+      avatar: '头像图片',
+      avatarTitle: '上传项目头像',
+      avatarReady: '头像已加入部署信息',
+      avatarHint: '支持 PNG、JPEG、SVG、GIF、WebP，建议小于 1MB，会自动压缩后写入 metadata',
+      avatarChange: '更换',
+      avatarRemove: '移除',
+      avatarInvalid: '请选择 PNG、JPEG、SVG、GIF 或 WebP 图片。',
+      avatarTooLarge: '图片不能超过 1MB。',
+      avatarMetadataTooLarge: '头像压缩后仍然偏大，请换一张更小的图。',
+      description: '代币简介（选填）',
+      descriptionPlaceholder: '简单介绍项目定位、玩法或社区信息',
       section02: '02 模板',
       templateTitle: '选择合约模板',
       section03: '03 铸造参数',
@@ -611,11 +631,23 @@ const copy = {
       factoryUnset: 'Not configured',
       section01: '01 Basics',
       title: 'Deploy your launch token',
-      intro: 'Fill in the brand name, symbol, description, payment token, mint price, and receiver wallet.',
+      intro: 'Fill in the name, symbol, avatar, and a short project intro.',
       feeBadge: 'Deployment fee 0.005 BNB',
       tokenName: 'Token name',
+      tokenNamePlaceholder: 'Enter token name',
       tokenSymbol: 'Token symbol',
-      description: 'Project description',
+      tokenSymbolPlaceholder: 'Enter token symbol',
+      avatar: 'Avatar image',
+      avatarTitle: 'Upload project avatar',
+      avatarReady: 'Avatar added to deploy metadata',
+      avatarHint: 'PNG, JPEG, SVG, GIF, or WebP. Keep it under 1MB; raster images are compressed before metadata is written.',
+      avatarChange: 'Change',
+      avatarRemove: 'Remove',
+      avatarInvalid: 'Choose a PNG, JPEG, SVG, GIF, or WebP image.',
+      avatarTooLarge: 'Image must be under 1MB.',
+      avatarMetadataTooLarge: 'Avatar is still too large after compression. Use a smaller image.',
+      description: 'Token intro (optional)',
+      descriptionPlaceholder: 'Briefly describe the project positioning, mechanics, or community',
       section02: '02 Template',
       templateTitle: 'Choose contract template',
       section03: '03 Mint settings',
@@ -811,6 +843,7 @@ function App() {
   const [advancedTax, setAdvancedTax] = useState<AdvancedTaxState>(initialAdvancedTax)
   const [buyTax, setBuyTax] = useState(3)
   const [sellTax, setSellTax] = useState(3)
+  const [avatar, setAvatar] = useState('')
   const [whitelistEnabled, setWhitelistEnabled] = useState(true)
   const [deployState, setDeployState] = useState<DeployState>('draft')
   const [notice, setNotice] = useState<Notice | null>(null)
@@ -1142,7 +1175,7 @@ function App() {
           buyTax,
           sellTax,
           templateId,
-          avatar: '',
+          avatar,
           whitelistEnabled: whitelistEnabled || Number(form.whitelistMintCount) > 0,
         },
         language,
@@ -1593,6 +1626,7 @@ function App() {
           advancedTax={advancedTax}
           allocation={allocation}
           allocationTotal={allocationTotal}
+          avatar={avatar}
           buyTax={buyTax}
           deployState={deployState}
           form={form}
@@ -1601,6 +1635,7 @@ function App() {
           onSubmit={submitLaunch}
           onTargetNetwork={onTargetNetwork}
           sellTax={sellTax}
+          setAvatar={setAvatar}
           setBuyTax={setBuyTax}
           setSellTax={setSellTax}
           setTemplateId={setTemplateId}
@@ -2080,7 +2115,7 @@ function ProjectCard({
   return (
     <article className="project-card">
       <div className="project-head">
-        <span>{project.symbol.slice(0, 1).toUpperCase()}</span>
+        <ProjectAvatar project={project} />
         <div>
           <h3>{project.name}</h3>
           <div className="project-identity">
@@ -2391,7 +2426,7 @@ function ProjectDetailPage({
     <main className="page detail-page">
       <section className="detail-hero">
         <div className="detail-title">
-          <span>{project.symbol.slice(0, 1).toUpperCase()}</span>
+          <ProjectAvatar project={project} size="detail" />
           <div>
             <p>{text.detail.eyebrow}</p>
             <h1>{text.detail.title(project.name)}</h1>
@@ -2860,6 +2895,7 @@ function LaunchPage({
   advancedTax,
   allocation,
   allocationTotal,
+  avatar,
   buyTax,
   deployState,
   form,
@@ -2868,6 +2904,7 @@ function LaunchPage({
   onSubmit,
   onTargetNetwork,
   sellTax,
+  setAvatar,
   setBuyTax,
   setSellTax,
   setTemplateId,
@@ -2885,6 +2922,7 @@ function LaunchPage({
   advancedTax: AdvancedTaxState
   allocation: AllocationState
   allocationTotal: number
+  avatar: string
   buyTax: number
   deployState: DeployState
   form: FormState
@@ -2893,6 +2931,7 @@ function LaunchPage({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onTargetNetwork: boolean
   sellTax: number
+  setAvatar: (value: string) => void
   setBuyTax: (value: number) => void
   setSellTax: (value: number) => void
   setTemplateId: (value: TemplateId) => void
@@ -2932,6 +2971,30 @@ function LaunchPage({
         launchProtectionBlocks: 'Guard blocks',
         claimWait: 'Claim wait (sec)',
       }
+  const [avatarError, setAvatarError] = useState('')
+
+  const handleAvatarFile = async (file?: File) => {
+    if (!file) {
+      return
+    }
+
+    setAvatarError('')
+
+    try {
+      const nextAvatar = await normalizeAvatarFile(file)
+      setAvatar(nextAvatar)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+
+      if (message === 'avatar-invalid') {
+        setAvatarError(text.launch.avatarInvalid)
+      } else if (message === 'avatar-source-large') {
+        setAvatarError(text.launch.avatarTooLarge)
+      } else {
+        setAvatarError(text.launch.avatarMetadataTooLarge)
+      }
+    }
+  }
 
   return (
     <main className="page narrow">
@@ -2968,12 +3031,66 @@ function LaunchPage({
             </div>
 
             <div className="fields two">
-              <InputField label={text.launch.tokenName} value={form.tokenName} onChange={(value) => updateForm('tokenName', value)} />
-              <InputField label={text.launch.tokenSymbol} value={form.symbol} onChange={(value) => updateForm('symbol', value.toUpperCase())} />
+              <InputField
+                label={text.launch.tokenName}
+                placeholder={text.launch.tokenNamePlaceholder}
+                value={form.tokenName}
+                onChange={(value) => updateForm('tokenName', value)}
+              />
+              <InputField
+                label={text.launch.tokenSymbol}
+                placeholder={text.launch.tokenSymbolPlaceholder}
+                value={form.symbol}
+                onChange={(value) => updateForm('symbol', value.toUpperCase())}
+              />
+            </div>
+            <div className="avatar-upload">
+              <span>{text.launch.avatar}</span>
+              <label className={avatar ? 'avatar-drop has-avatar' : 'avatar-drop'}>
+                <input
+                  className="sr-only"
+                  type="file"
+                  accept={avatarAccept}
+                  onChange={(event) => {
+                    void handleAvatarFile(event.target.files?.[0])
+                    event.target.value = ''
+                  }}
+                />
+                <span className="avatar-preview">
+                  {avatar ? <img src={avatar} alt="" /> : <Plus size={30} />}
+                </span>
+                <span className="avatar-copy">
+                  <strong>{avatar ? text.launch.avatarReady : text.launch.avatarTitle}</strong>
+                  <em>{text.launch.avatarHint}</em>
+                </span>
+              </label>
+              {avatar && (
+                <div className="avatar-actions">
+                  <label>
+                    <ImagePlus size={15} />
+                    {text.launch.avatarChange}
+                    <input
+                      className="sr-only"
+                      type="file"
+                      accept={avatarAccept}
+                      onChange={(event) => {
+                        void handleAvatarFile(event.target.files?.[0])
+                        event.target.value = ''
+                      }}
+                    />
+                  </label>
+                  <button type="button" onClick={() => setAvatar('')}>
+                    <Trash2 size={15} />
+                    {text.launch.avatarRemove}
+                  </button>
+                </div>
+              )}
+              {avatarError && <p className="avatar-error">{avatarError}</p>}
             </div>
             <label className="field">
               <span>{text.launch.description}</span>
               <textarea
+                placeholder={text.launch.descriptionPlaceholder}
                 value={form.description}
                 onChange={(event) => updateForm('description', event.target.value)}
               />
@@ -3284,6 +3401,91 @@ function LaunchPage({
         </aside>
       </form>
     </main>
+  )
+}
+
+async function normalizeAvatarFile(file: File) {
+  if (!avatarAcceptedTypes.includes(file.type)) {
+    throw new Error('avatar-invalid')
+  }
+
+  if (file.size > avatarMaxSourceBytes) {
+    throw new Error('avatar-source-large')
+  }
+
+  if (file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/webp') {
+    const compressed = await compressRasterAvatar(file)
+    if (readTextBytes(compressed) > avatarMaxMetadataBytes) {
+      throw new Error('avatar-metadata-large')
+    }
+
+    return compressed
+  }
+
+  const dataUrl = await readFileAsDataUrl(file)
+  if (readTextBytes(dataUrl) > avatarMaxMetadataBytes) {
+    throw new Error('avatar-metadata-large')
+  }
+
+  return dataUrl
+}
+
+async function compressRasterAvatar(file: File) {
+  const dataUrl = await readFileAsDataUrl(file)
+  const image = await loadDataUrlImage(dataUrl)
+  const side = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height)
+  const outputSize = Math.max(1, Math.min(avatarCanvasSize, side))
+  const canvas = document.createElement('canvas')
+  canvas.width = outputSize
+  canvas.height = outputSize
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return dataUrl
+  }
+
+  const sourceX = ((image.naturalWidth || image.width) - side) / 2
+  const sourceY = ((image.naturalHeight || image.height) - side) / 2
+  context.drawImage(image, sourceX, sourceY, side, side, 0, 0, outputSize, outputSize)
+
+  return canvas.toDataURL('image/webp', 0.82)
+}
+
+function loadDataUrlImage(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('avatar-invalid'))
+    image.src = dataUrl
+  })
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+      } else {
+        reject(new Error('avatar-invalid'))
+      }
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('avatar-invalid'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function readTextBytes(value: string) {
+  return new Blob([value]).size
+}
+
+function ProjectAvatar({ project, size = 'card' }: { project: LaunchProject; size?: 'card' | 'detail' }) {
+  const fallback = project.symbol.slice(0, 1).toUpperCase() || '?'
+
+  return (
+    <span className={`project-avatar ${size}`}>
+      {project.avatar ? <img src={project.avatar} alt="" loading="lazy" /> : fallback}
+    </span>
   )
 }
 

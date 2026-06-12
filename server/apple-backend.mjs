@@ -218,9 +218,14 @@ function runVerify(token) {
 }
 
 async function findVanitySalt(body) {
-  const suffix = String(body.suffix ?? "aaaa").toLowerCase().replace(/^0x/, "");
+  const requestedSuffix = String(body.suffix ?? "aaaa").toLowerCase().replace(/^0x/, "");
+  const factoryRequiredSuffix = await readFactoryRequiredSuffix();
+  const suffix = factoryRequiredSuffix || requestedSuffix;
   if (!/^[0-9a-f]{1,4}$/.test(suffix)) {
     throw new Error("suffix must be 1-4 hex characters.");
+  }
+  if (factoryRequiredSuffix && requestedSuffix.padStart(4, "0") !== factoryRequiredSuffix) {
+    throw new Error(`factory requires token suffix ${factoryRequiredSuffix}.`);
   }
 
   const creator = normalizeAddress(body.creator);
@@ -292,6 +297,15 @@ async function findVanitySalt(body) {
     attempts: maxIterations,
     elapsedMs: Date.now() - startedAt,
   };
+}
+
+async function readFactoryRequiredSuffix() {
+  try {
+    const suffix = Number(await factory.requiredTokenSuffix());
+    return suffix > 0 ? suffix.toString(16).padStart(4, "0") : "";
+  } catch {
+    return "";
+  }
 }
 
 function normalizeLaunchParams(params) {

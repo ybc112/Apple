@@ -748,17 +748,24 @@ a {
   align-items: start;
 }
 
-.project-head > span {
+.project-avatar {
   display: grid;
   width: 52px;
   height: 52px;
   place-items: center;
+  overflow: hidden;
   border: 1px solid rgba(141, 247, 196, 0.36);
   border-radius: 50%;
   color: var(--accent);
   background: rgba(141, 247, 196, 0.1);
   font-size: 22px;
   font-weight: 950;
+}
+
+.project-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .project-card h3 {
@@ -1346,6 +1353,15 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 .field,
 .slider-field {
   display: grid;
@@ -1411,6 +1427,122 @@ a {
 .field select:hover {
   border-color: rgba(141, 247, 196, 0.36);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.avatar-upload {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.avatar-upload > span {
+  color: #bdcac5;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.avatar-drop {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 128px;
+  border: 1px dashed rgba(141, 247, 196, 0.34);
+  border-radius: var(--radius);
+  padding: 18px;
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(141, 247, 196, 0.08), rgba(139, 215, 255, 0.035)),
+    rgba(255, 255, 255, 0.045);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.avatar-drop:hover,
+.avatar-drop:focus-within {
+  border-color: rgba(141, 247, 196, 0.68);
+  background:
+    linear-gradient(135deg, rgba(141, 247, 196, 0.13), rgba(139, 215, 255, 0.06)),
+    rgba(255, 255, 255, 0.065);
+  box-shadow: 0 0 0 3px rgba(141, 247, 196, 0.08);
+  transform: translateY(-1px);
+}
+
+.avatar-preview {
+  display: grid;
+  width: 74px;
+  height: 74px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 212, 113, 0.32);
+  border-radius: 18px;
+  color: #ffd471;
+  background:
+    linear-gradient(180deg, rgba(255, 212, 113, 0.16), rgba(141, 247, 196, 0.08)),
+    rgba(0, 0, 0, 0.2);
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.avatar-copy strong {
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.avatar-copy em {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.avatar-actions label,
+.avatar-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid rgba(141, 247, 196, 0.22);
+  border-radius: var(--radius);
+  padding: 0 11px;
+  color: var(--accent-2);
+  background: rgba(141, 247, 196, 0.065);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.avatar-actions button {
+  color: #ffd6d6;
+  background: rgba(255, 107, 107, 0.08);
+  border-color: rgba(255, 107, 107, 0.28);
+}
+
+.avatar-error {
+  margin: 0;
+  color: #ffd6d6;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .link-fields {
@@ -2067,19 +2199,15 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
 }
 
-.detail-title > span {
-  display: grid;
+.detail-title .project-avatar.detail {
   width: 58px;
   height: 58px;
   flex: 0 0 auto;
-  place-items: center;
   border: 1px solid rgba(141, 247, 196, 0.42);
-  border-radius: var(--radius);
-  color: var(--accent);
+  border-radius: 18px;
   background: rgba(141, 247, 196, 0.1);
   box-shadow: inset 0 0 28px rgba(141, 247, 196, 0.05);
   font-size: 24px;
-  font-weight: 950;
 }
 
 .detail-title p,
@@ -2707,6 +2835,16 @@ input[type="range"]::-moz-range-thumb {
 
   .whitelist-batch-input {
     min-height: 240px;
+  }
+
+  .avatar-drop {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .avatar-preview {
+    width: 68px;
+    height: 68px;
   }
 
   .link-icon {

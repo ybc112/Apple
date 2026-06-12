@@ -16,10 +16,9 @@ export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 export const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'
 
 export const initialForm: FormState = {
-  tokenName: 'Apple',
-  symbol: 'APPLE',
-  description:
-    'Apple Seed Launch：面向社区的链上发射实验，独立代币、独立金库、公开 mint，关键参数全部写入链上。',
+  tokenName: '',
+  symbol: '',
+  description: '',
   supply: '1000000000',
   mintCount: '2000',
   publicMintCount: '1800',

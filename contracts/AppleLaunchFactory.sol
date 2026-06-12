@@ -36,6 +36,16 @@ interface IAppleMintVaultDeployer {
         returns (address vault);
 }
 
+interface IAppleLaunchRouter {
+    function WETH() external view returns (address);
+    function factory() external view returns (address);
+}
+
+interface IAppleLaunchSwapFactory {
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+    function getPair(address tokenA, address tokenB) external view returns (address pair);
+}
+
 contract AppleLaunchFactory is Ownable, ReentrancyGuard {
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint16 public constant MAX_TAX_BPS = 2_500;
@@ -46,6 +56,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
     address public liquidityRouter;
     address public tokenDeployer;
     address public vaultDeployer;
+    uint16 public immutable requiredTokenSuffix;
     address[] public allTokens;
 
     struct LaunchParams {
@@ -116,6 +127,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
 
     error InvalidFee();
     error InvalidParams();
+    error InvalidTokenSuffix(address token, uint16 requiredSuffix);
     error ZeroAddress();
 
     event LaunchCreated(
@@ -146,7 +158,8 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         uint256 creationFee_,
         address liquidityRouter_,
         address tokenDeployer_,
-        address vaultDeployer_
+        address vaultDeployer_,
+        uint16 requiredTokenSuffix_
     )
         Ownable(msg.sender)
     {
@@ -162,6 +175,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         tokenDeployer = tokenDeployer_;
         vaultDeployer = vaultDeployer_;
         creationFee = creationFee_;
+        requiredTokenSuffix = requiredTokenSuffix_;
     }
 
     function createLaunch(LaunchParams calldata params, bytes32 salt)
@@ -212,6 +226,9 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         )));
 
         launchToken.setLiquidityRouter(liquidityRouter);
+        _requireTokenSuffix(address(launchToken));
+        address launchPair = _createLaunchPair(address(launchToken));
+        launchToken.setLaunchPair(launchPair);
 
         AppleMintVault mintVault = AppleMintVault(payable(IAppleMintVaultDeployer(vaultDeployer).deploy(
             address(launchToken),
@@ -366,6 +383,29 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
                 || splitTotal > BPS_DENOMINATOR
         ) {
             revert InvalidParams();
+        }
+    }
+
+    function _createLaunchPair(address token) private returns (address pair) {
+        IAppleLaunchRouter router = IAppleLaunchRouter(liquidityRouter);
+        IAppleLaunchSwapFactory swapFactory = IAppleLaunchSwapFactory(router.factory());
+        address pairedAsset = router.WETH();
+        pair = swapFactory.getPair(token, pairedAsset);
+        if (pair == address(0)) {
+            pair = swapFactory.createPair(token, pairedAsset);
+        }
+        if (pair == address(0)) {
+            revert ZeroAddress();
+        }
+    }
+
+    function _requireTokenSuffix(address token) private view {
+        if (requiredTokenSuffix == 0) {
+            return;
+        }
+
+        if (uint16(uint160(token)) != requiredTokenSuffix) {
+            revert InvalidTokenSuffix(token, requiredTokenSuffix);
         }
     }
 

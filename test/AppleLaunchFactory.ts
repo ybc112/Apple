@@ -10,7 +10,7 @@ describe("AppleLaunchFactory", function () {
     await ethers.provider.send("evm_mine", []);
   }
 
-  async function deployFactory() {
+  async function deployFactory(requiredTokenSuffix = 0) {
     const [owner, creator, buyer, pair, dividendReceiver] = await ethers.getSigners();
     const creationFee = ethers.parseEther("0.005");
     const router = await ethers.deployContract("MockPancakeRouter");
@@ -22,11 +22,12 @@ describe("AppleLaunchFactory", function () {
       await router.getAddress(),
       await tokenDeployer.getAddress(),
       await vaultDeployer.getAddress(),
+      requiredTokenSuffix,
     ]);
     await tokenDeployer.setFactory(await factory.getAddress());
     await vaultDeployer.setFactory(await factory.getAddress());
 
-    return { owner, creator, buyer, pair, dividendReceiver, creationFee, factory, router };
+    return { owner, creator, buyer, pair, dividendReceiver, creationFee, factory, router, tokenDeployer };
   }
 
   async function getLiquidityPair(router: any, tokenAddress: string, pairedAsset?: string) {
@@ -68,6 +69,60 @@ describe("AppleLaunchFactory", function () {
     };
   }
 
+  async function predictTokenAddress(
+    tokenDeployerAddress: string,
+    factoryAddress: string,
+    creator: string,
+    platformFeeReceiver: string,
+    params: ReturnType<typeof launchParams>,
+    salt: string,
+  ) {
+    const tokenFactory = await ethers.getContractFactory("AppleToken");
+    const rewardToken = params.rewardToken === ethersLib.ZeroAddress
+      ? "0x55d398326f99059fF775485246999027B3197955"
+      : params.rewardToken;
+    const deployTx = await tokenFactory.getDeployTransaction(
+      {
+        name: params.name,
+        symbol: params.symbol,
+        projectUri: params.metadataUri,
+        templateId: params.templateId,
+        receiver: params.receiver,
+        platformFeeReceiver,
+        paymentToken: params.paymentToken,
+        rewardToken,
+        rewardThreshold: params.rewardThreshold,
+        totalSupply: params.totalSupply,
+      },
+      {
+        buyTaxBps: params.buyTaxBps,
+        sellTaxBps: params.sellTaxBps,
+        transferTaxBps: params.transferTaxBps,
+        addLiquidityTaxBps: params.addLiquidityTaxBps,
+        removeLiquidityTaxBps: params.removeLiquidityTaxBps,
+        launchProtectionTaxBps: params.launchProtectionTaxBps,
+        launchProtectionBlocks: params.launchProtectionBlocks,
+        claimWait: params.claimWait,
+        fundFeeBps: params.fundFeeBps,
+        lpFeeBps: params.lpFeeBps,
+        dividendFeeBps: params.dividendFeeBps,
+        burnFeeBps: params.burnFeeBps,
+      },
+      factoryAddress,
+    );
+    const networkInfo = await ethers.provider.getNetwork();
+    const tokenSalt = ethersLib.solidityPackedKeccak256(
+      ["address", "bytes32", "string", "string", "uint256"],
+      [creator, salt, params.name, params.symbol, networkInfo.chainId],
+    );
+
+    if (!deployTx.data) {
+      throw new Error("Missing AppleToken deploy data");
+    }
+
+    return ethersLib.getCreate2Address(tokenDeployerAddress, tokenSalt, ethersLib.keccak256(deployTx.data));
+  }
+
   it("creates an independent token and mint vault after paying the launch fee", async function () {
     const { owner, creator, creationFee, factory, router } = await deployFactory();
     const params = launchParams(creator.address);
@@ -82,6 +137,7 @@ describe("AppleLaunchFactory", function () {
     const project = await factory.projects(tokenAddress);
     const token = await ethers.getContractAt("AppleToken", tokenAddress);
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+    const launchPair = await getLiquidityPair(router, tokenAddress);
 
     expect(project.creator).to.equal(creator.address);
     expect(project.receiver).to.equal(creator.address);
@@ -94,6 +150,8 @@ describe("AppleLaunchFactory", function () {
     expect(project.publicMintCount).to.equal(params.mintCount);
     expect(await token.owner()).to.equal(creator.address);
     expect(await token.liquidityRouter()).to.equal(await router.getAddress());
+    expect(await token.liquidityPair()).to.equal(launchPair);
+    expect(await token.automatedMarketMakerPairs(launchPair)).to.equal(true);
     expect(await token.rewardToken()).to.equal(await factory.DEFAULT_REWARD_TOKEN());
     expect(await token.balanceOf(project.vault)).to.equal(params.totalSupply);
     expect(await vault.tokensForSale()).to.equal(params.totalSupply / 2n);
@@ -106,6 +164,39 @@ describe("AppleLaunchFactory", function () {
     const projectPage = await factory.getProjects(0n, 10n);
     expect(projectPage.length).to.equal(1);
     expect(projectPage[0].token).to.equal(tokenAddress);
+  });
+
+  it("rejects launch salts that do not create the required token suffix", async function () {
+    const { owner, creator, creationFee, factory, tokenDeployer } = await deployFactory(0xaaaa);
+    const params = launchParams(creator.address);
+    let salt = ethers.id("wrong-suffix-1");
+
+    for (let i = 1; i < 8; i += 1) {
+      const predicted = await predictTokenAddress(
+        await tokenDeployer.getAddress(),
+        await factory.getAddress(),
+        creator.address,
+        owner.address,
+        params,
+        salt,
+      );
+      if (!predicted.toLowerCase().endsWith("aaaa")) {
+        break;
+      }
+      salt = ethers.id(`wrong-suffix-${i + 1}`);
+    }
+
+    let rejected = false;
+    try {
+      await factory
+        .connect(creator)
+        .createLaunch(params, salt, { value: creationFee });
+    } catch {
+      rejected = true;
+    }
+
+    expect(rejected).to.equal(true);
+    expect(await factory.allTokensLength()).to.equal(0n);
   });
 
   it("lets users mint real ERC20 balances from the vault", async function () {
@@ -168,7 +259,6 @@ describe("AppleLaunchFactory", function () {
     const tokenAddress = await factory.allTokens(0);
     const project = await factory.projects(tokenAddress);
     const vault = await ethers.getContractAt("AppleMintVault", project.vault);
-
     await vault.connect(buyer).mint(2n, { value: params.mintPrice * 2n });
     let limitBlocked = false;
     try {
@@ -675,6 +765,7 @@ describe("AppleLaunchFactory", function () {
     const liquiditySwapTokens = lpAmount - liquidityHalf;
     const supplyBefore = await token.totalSupply();
     const blackHole = await token.LP_BLACK_HOLE();
+    const burnSinkBefore = await token.balanceOf(blackHole);
     const platformBefore = await ethers.provider.getBalance(owner.address);
     const marketingBefore = await ethers.provider.getBalance(creator.address);
     const lpBefore = await pair.balanceOf(blackHole);
@@ -702,7 +793,8 @@ describe("AppleLaunchFactory", function () {
     expect((await pair.balanceOf(blackHole)) - lpBefore).to.equal(liquiditySwapTokens);
     expect(buyerRewardBalance + distributorRewardBalance).to.equal(dividendAmount);
     expect(buyerRewardBalance + buyerUnpaid).to.equal(dividendAmount);
-    expect(await token.totalSupply()).to.equal(supplyBefore - burnAmount);
+    expect((await token.balanceOf(blackHole)) - burnSinkBefore).to.equal(burnAmount);
+    expect(await token.totalSupply()).to.equal(supplyBefore);
     expect(await token.totalPlatformRouted()).to.equal(platformAmount);
     expect(await token.totalMarketingRouted()).to.equal(marketingAmount);
     expect(await token.totalLiquidityAdded()).to.equal(liquiditySwapTokens);
@@ -820,6 +912,7 @@ describe("AppleLaunchFactory", function () {
     await dividendReceiver.sendTransaction({
       to: tokenAddress,
       value: params.mintPrice * 2n,
+      data: "0x12345678",
     });
 
     expect(await vault.publicMintedCount()).to.equal(2n);

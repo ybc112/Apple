@@ -78,6 +78,7 @@ export type LaunchProject = {
   name: string
   symbol: string
   description: string
+  avatar: string
   website: string
   telegram: string
   xLink: string
