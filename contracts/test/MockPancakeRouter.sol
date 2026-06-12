@@ -90,7 +90,15 @@ contract MockPancakeRouter {
     )
         external
     {
-        IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
+        address pair = _factory.getPair(path[0], WETH);
+        if (pair == address(0)) {
+            IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
+        } else {
+            IERC20(path[0]).transferFrom(msg.sender, pair, amountIn);
+            _assertPairInput(pair, path[0]);
+            MockPancakePair(payable(pair)).sync(WETH);
+        }
+
         (bool sent,) = payable(to).call{ value: amountIn }("");
         require(sent, "NATIVE_SEND_FAILED");
     }
@@ -104,7 +112,15 @@ contract MockPancakeRouter {
     )
         external
     {
-        IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
+        address pair = _factory.getPair(path[0], WETH);
+        if (pair == address(0)) {
+            IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
+        } else {
+            IERC20(path[0]).transferFrom(msg.sender, pair, amountIn);
+            _assertPairInput(pair, path[0]);
+            MockPancakePair(payable(pair)).sync(WETH);
+        }
+
         MockRewardToken(path[path.length - 1]).mint(to, amountIn);
     }
 
@@ -150,6 +166,15 @@ contract MockPancakeRouter {
         IERC20(pair).transferFrom(msg.sender, pair, liquidity);
         (, amountETH) = MockPancakePair(payable(pair)).burnLiquidity(token, to, liquidity);
         MockPancakePair(payable(pair)).sync(WETH);
+    }
+
+    function _assertPairInput(address pair, address inputToken) private view {
+        (uint112 reserve0, uint112 reserve1,) = MockPancakePair(payable(pair)).getReserves();
+        uint256 reserveInput = MockPancakePair(payable(pair)).token0() == inputToken
+            ? uint256(reserve0)
+            : uint256(reserve1);
+        uint256 balanceInput = IERC20(inputToken).balanceOf(pair);
+        require(balanceInput > reserveInput, "PancakeLibrary: INSUFFICIENT_INPUT_AMOUNT");
     }
 
     receive() external payable {}

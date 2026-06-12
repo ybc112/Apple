@@ -841,14 +841,14 @@ contract AppleToken is ERC20, Ownable {
             super._update(from, address(this), collectedAmount);
         }
 
+        if (to == liquidityPair) {
+            _swapBackIfNeeded();
+        }
+
         uint256 netAmount = value - fee;
         super._update(from, to, netAmount);
         _syncDividendShare(from);
         _syncDividendShare(to);
-
-        if (to == liquidityPair) {
-            _swapBackIfNeeded();
-        }
         _processDividends();
 
         emit TaxCollected(

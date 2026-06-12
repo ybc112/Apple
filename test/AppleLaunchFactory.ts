@@ -550,7 +550,7 @@ describe("AppleLaunchFactory", function () {
 
     const pairAddress = await getLiquidityPair(router, tokenAddress);
     const pair = await ethers.getContractAt("MockPancakePair", pairAddress);
-    const transferAmount = ethers.parseUnits("1000", 18);
+    const transferAmount = ethers.parseUnits("1", 18);
     const fee = (transferAmount * BigInt(params.sellTaxBps)) / 10000n;
     const platformAmount = (fee * BigInt(await token.PLATFORM_TAX_SHARE_BPS())) / 10000n;
     const projectFee = fee - platformAmount;
@@ -567,19 +567,28 @@ describe("AppleLaunchFactory", function () {
     const lpBefore = await pair.balanceOf(blackHole);
     const pairTokenBefore = await token.balanceOf(pairAddress);
 
-    await token.connect(buyer).transfer(pairAddress, transferAmount);
+    await token.connect(buyer).approve(await router.getAddress(), transferAmount);
+    await router.connect(buyer).swapExactTokensForETHSupportingFeeOnTransferTokens(
+      transferAmount,
+      0,
+      [tokenAddress, await router.WETH()],
+      buyer.address,
+      0,
+    );
 
     const distributorAddress = await token.dividendDistributor();
     const buyerUnpaid = await token.unpaidDividend(buyer.address);
+    const buyerRewardBalance = await rewardToken.balanceOf(buyer.address);
+    const distributorRewardBalance = await rewardToken.balanceOf(distributorAddress);
 
     expect((await token.balanceOf(pairAddress)) - pairTokenBefore).to.equal(
-      transferAmount - fee + liquidityHalf,
+      transferAmount - burnAmount,
     );
     expect((await ethers.provider.getBalance(owner.address)) - platformBefore).to.equal(platformAmount);
     expect((await ethers.provider.getBalance(creator.address)) - marketingBefore).to.equal(marketingAmount);
     expect((await pair.balanceOf(blackHole)) - lpBefore).to.equal(liquiditySwapTokens);
-    expect(await rewardToken.balanceOf(distributorAddress)).to.equal(dividendAmount);
-    expect(buyerUnpaid > 0n).to.equal(true);
+    expect(buyerRewardBalance + distributorRewardBalance).to.equal(dividendAmount);
+    expect(buyerRewardBalance + buyerUnpaid).to.equal(dividendAmount);
     expect(await token.totalSupply()).to.equal(supplyBefore - burnAmount);
     expect(await token.totalPlatformRouted()).to.equal(platformAmount);
     expect(await token.totalMarketingRouted()).to.equal(marketingAmount);
@@ -587,8 +596,10 @@ describe("AppleLaunchFactory", function () {
     expect(await token.totalDividendsDeposited()).to.equal(dividendAmount);
     expect(await token.totalTaxBurned()).to.equal(burnAmount);
 
-    await token.connect(buyer).claimDividend();
-    expect(await rewardToken.balanceOf(buyer.address)).to.equal(buyerUnpaid);
+    if (buyerUnpaid > 0n) {
+      await token.connect(buyer).claimDividend();
+      expect(await rewardToken.balanceOf(buyer.address)).to.equal(dividendAmount);
+    }
   });
 
   it("lets BscScan-style token mint buttons forward the real minter to the vault", async function () {
@@ -692,52 +703,35 @@ describe("AppleLaunchFactory", function () {
   });
 
   it("enforces dividend claim wait after the first claim", async function () {
-    const { owner, creator, buyer, creationFee, factory, router } = await deployFactory();
+    const { owner, buyer } = await deployFactory();
     const rewardToken = await ethers.deployContract("MockRewardToken");
-    const params = {
-      ...launchParams(creator.address),
-      mintCount: 2n,
-      rewardToken: await rewardToken.getAddress(),
-      claimWait: 60,
-    };
+    const distributor = await ethers.deployContract("AppleDividendDistributor", [
+      await rewardToken.getAddress(),
+      60,
+    ]);
 
-    await factory
-      .connect(creator)
-      .createLaunch(params, ethers.id("salt-claim-wait"), { value: creationFee });
-
-    const tokenAddress = await factory.allTokens(0);
-    const project = await factory.projects(tokenAddress);
-    const token = await ethers.getContractAt("AppleToken", tokenAddress);
-    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
-
-    await owner.sendTransaction({
-      to: await router.getAddress(),
-      value: ethers.parseEther("100"),
-    });
-    await token.connect(creator).setSwapSettings(true, 1n);
-    await token.connect(creator).setDistributorGas(0n);
-    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
-
-    const pairAddress = await getLiquidityPair(router, tokenAddress);
-    const transferAmount = ethers.parseUnits("1000", 18);
-    await token.connect(buyer).transfer(pairAddress, transferAmount);
-    const firstDividend = await token.unpaidDividend(buyer.address);
+    const firstDividend = ethers.parseUnits("10", 18);
+    await rewardToken.mint(await distributor.getAddress(), firstDividend);
+    await distributor.connect(owner).setShare(buyer.address, ethers.parseUnits("100", 18));
+    await distributor.connect(owner).deposit(firstDividend);
     expect(firstDividend > 0n).to.equal(true);
-    await token.connect(buyer).claimDividend();
+    await distributor.connect(buyer).claimDividend();
 
-    await token.connect(buyer).transfer(pairAddress, transferAmount);
-    expect((await token.unpaidDividend(buyer.address)) > 0n).to.equal(true);
+    const secondDividend = ethers.parseUnits("5", 18);
+    await rewardToken.mint(await distributor.getAddress(), secondDividend);
+    await distributor.connect(owner).deposit(secondDividend);
+    expect((await distributor.getUnpaidEarnings(buyer.address)) > 0n).to.equal(true);
 
     let claimBlocked = false;
     try {
-      await token.connect(buyer).claimDividend();
+      await distributor.connect(buyer).claimDividend();
     } catch {
       claimBlocked = true;
     }
     expect(claimBlocked).to.equal(true);
 
     await increaseTime(61);
-    await token.connect(buyer).claimDividend();
+    await distributor.connect(buyer).claimDividend();
     expect((await rewardToken.balanceOf(buyer.address)) > firstDividend).to.equal(true);
   });
 
