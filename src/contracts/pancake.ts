@@ -7,7 +7,7 @@ import {
   isAddress,
   parseEther,
   parseUnits,
-  toBeHex,
+  toQuantity,
 } from 'ethers'
 import { BNB_CHAIN } from '../data'
 import type { EthereumProvider } from '../wallet'
@@ -213,7 +213,7 @@ export async function executePancakeSwap(
       {
         from,
         to: PANCAKE_V2_ROUTER_ADDRESS,
-        value: request.direction === 'buy' ? toBeHex(amountIn) : toBeHex(0),
+        value: request.direction === 'buy' ? toQuantity(amountIn) : '0x0',
         data,
       },
     ],

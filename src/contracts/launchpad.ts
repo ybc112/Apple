@@ -11,7 +11,7 @@ import {
   parseEther,
   parseUnits,
   randomBytes,
-  toBeHex,
+  toQuantity,
 } from 'ethers'
 import { BNB_CHAIN, USDT_ADDRESS } from '../data'
 import type { LaunchDraft, LaunchProject } from '../types'
@@ -272,7 +272,7 @@ export async function createLaunchToken(
       {
         from,
         to: launchpadConfig.factoryAddress,
-        value: toBeHex(BigInt(launchpadConfig.creationFeeWei)),
+        value: toQuantity(BigInt(launchpadConfig.creationFeeWei)),
         data,
       },
     ],
@@ -629,7 +629,7 @@ export async function mintLaunchProject(
   const tx = {
     from,
     to: project.vault,
-    value: project.paymentToken.toLowerCase() === ZeroAddress ? toBeHex(cost) : '0x0',
+    value: project.paymentToken.toLowerCase() === ZeroAddress ? toQuantity(cost) : '0x0',
     data,
   }
   const isNativeMint = project.paymentToken.toLowerCase() === ZeroAddress
@@ -649,17 +649,17 @@ export async function mintLaunchProject(
     const nativeGas = isNativeMint && bufferedGas < NATIVE_MINT_GAS_FLOOR
       ? NATIVE_MINT_GAS_FLOOR
       : bufferedGas
-    gas = toBeHex(nativeGas)
+    gas = toQuantity(nativeGas)
   } catch {
     if (!isNativeMint) {
       throw new Error(text.mintEstimateFailed)
     }
-    gas = toBeHex(NATIVE_MINT_GAS_FLOOR)
+    gas = toQuantity(NATIVE_MINT_GAS_FLOOR)
   }
 
   try {
     const currentGasPrice = BigInt(String(await readProvider.send('eth_gasPrice', [])))
-    gasPrice = toBeHex((currentGasPrice * GAS_PRICE_BUFFER_BPS) / BPS_DENOMINATOR)
+    gasPrice = toQuantity((currentGasPrice * GAS_PRICE_BUFFER_BPS) / BPS_DENOMINATOR)
   } catch {
     gasPrice = undefined
   }

@@ -1,4 +1,4 @@
-import { Contract, Interface, JsonRpcProvider, isAddress, toBeHex } from 'ethers'
+import { Contract, Interface, JsonRpcProvider, isAddress } from 'ethers'
 import { BNB_CHAIN } from '../data'
 import type { EthereumProvider } from '../wallet'
 import { launchpadConfig } from './launchpad'
@@ -268,7 +268,7 @@ async function sendTransaction(provider: EthereumProvider, from: string, data: s
       {
         from,
         to: auditRegistryConfig.registryAddress,
-        value: toBeHex(0),
+        value: '0x0',
         data,
       },
     ],
