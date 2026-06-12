@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { Contract, JsonRpcProvider, isAddress } from "ethers";
 
+process.env.PRIVATE_KEY ??= `0x${"1".padStart(64, "0")}`;
+
 const factoryArtifact = JSON.parse(
   fs.readFileSync("artifacts/contracts/AppleLaunchFactory.sol/AppleLaunchFactory.json", "utf8"),
 );
