@@ -622,6 +622,14 @@ contract AppleToken is ERC20, Ownable {
         return dividendDistributor.claimWait();
     }
 
+    function _mainPair() external view returns (address) {
+        return liquidityPair;
+    }
+
+    function _swapPairList(address pair) external view returns (bool) {
+        return automatedMarketMakerPairs[pair];
+    }
+
     function isAddV2() external view returns (bool) {
         return _isAddLiquidity(liquidityPair);
     }
@@ -712,10 +720,6 @@ contract AppleToken is ERC20, Ownable {
     }
 
     function setAutomatedMarketMakerPair(address pair, bool enabled) external onlyOwner {
-        if (pair == address(0)) {
-            revert ZeroAddress();
-        }
-
         automatedMarketMakerPairs[pair] = enabled;
         isDividendExempt[pair] = enabled;
         if (enabled) {

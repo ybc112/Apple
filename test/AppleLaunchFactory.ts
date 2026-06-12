@@ -151,7 +151,9 @@ describe("AppleLaunchFactory", function () {
     expect(await token.owner()).to.equal(creator.address);
     expect(await token.liquidityRouter()).to.equal(await router.getAddress());
     expect(await token.liquidityPair()).to.equal(launchPair);
+    expect(await token._mainPair()).to.equal(launchPair);
     expect(await token.automatedMarketMakerPairs(launchPair)).to.equal(true);
+    expect(await token._swapPairList(launchPair)).to.equal(true);
     expect(await token.rewardToken()).to.equal(await factory.DEFAULT_REWARD_TOKEN());
     expect(await token.balanceOf(project.vault)).to.equal(params.totalSupply);
     expect(await vault.tokensForSale()).to.equal(params.totalSupply / 2n);
@@ -337,6 +339,8 @@ describe("AppleLaunchFactory", function () {
     expect(await vault.finalized()).to.equal(true);
     expect(await token.tradingEnabled()).to.equal(true);
     expect(await token.automatedMarketMakerPairs(pairAddress)).to.equal(true);
+    expect(await token._mainPair()).to.equal(pairAddress);
+    expect(await token._swapPairList(pairAddress)).to.equal(true);
     expect(await token.owner()).to.equal(await token.LP_BLACK_HOLE());
     expect(await vault.owner()).to.equal(await vault.PERMISSION_BLACK_HOLE());
     expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
