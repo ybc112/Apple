@@ -350,7 +350,7 @@ const copy = {
       x: 'X 链接',
       website: '官网链接',
       configWarning:
-        '真实交易已经接好，但还没有配置 Factory 地址。部署合约后把地址写入 VITE_LAUNCHPAD_FACTORY_ADDRESS。',
+        '真实交易已经接好，前端源码已内置当前 Factory 地址；如果这里仍提示异常，请检查源码默认地址或覆盖配置。',
       pending: '等待钱包确认',
       submit: '部署并进入链上列表',
       currentTemplate: '当前模板',
@@ -369,7 +369,7 @@ const copy = {
     auditors: {
       title: '链上审核员',
       desc: '审核员申请、平台批准、项目评分和报告链接都会写入 Audit Registry，用户可以直接查链上记录。',
-      configWarning: '审核 Registry 未配置：部署 AppleAuditRegistry 后，把地址写入 VITE_AUDIT_REGISTRY_ADDRESS。',
+      configWarning: '审核 Registry 未配置：前端源码已内置当前 Registry 地址；如需换合约再覆盖配置。',
       registry: '审核 Registry',
       connect: '连接钱包',
       statusTitle: '我的审核员状态',
@@ -641,7 +641,7 @@ const copy = {
       x: 'X link',
       website: 'Website link',
       configWarning:
-        'Real transactions are wired, but the Factory address is not configured yet. Set VITE_LAUNCHPAD_FACTORY_ADDRESS after deploying the contract.',
+        'Real transactions are wired and the current Factory address is built into the frontend source. Check the default address or override config only if this warning appears.',
       pending: 'Waiting for wallet',
       submit: 'Deploy and list on-chain',
       currentTemplate: 'Current template',
@@ -660,7 +660,7 @@ const copy = {
     auditors: {
       title: 'On-chain auditors',
       desc: 'Auditor applications, admin approval, project scores, and report links are written to the Audit Registry.',
-      configWarning: 'Audit Registry is not configured. Deploy AppleAuditRegistry and set VITE_AUDIT_REGISTRY_ADDRESS.',
+      configWarning: 'Audit Registry is not configured. The current Registry address is built into the frontend source; override it only for a new deployment.',
       registry: 'Audit Registry',
       connect: 'Connect wallet',
       statusTitle: 'My auditor status',
@@ -3595,8 +3595,8 @@ function translateTemplate(template: LaunchTemplate, language: Language) {
 function readProjectEmptyMessage(projectCount: number, query: string, language: Language) {
   if (!isLaunchpadConfigured) {
     return language === 'zh'
-      ? '部署 Factory 后，把地址写入 VITE_LAUNCHPAD_FACTORY_ADDRESS，这里会读取真实链上项目。'
-      : 'Deploy the Factory and set VITE_LAUNCHPAD_FACTORY_ADDRESS to read real on-chain projects here.'
+      ? '前端源码已内置当前 Factory 地址；如果这里没有读取到项目，请检查默认地址或链上网络。'
+      : 'The current Factory address is built into the frontend source. If projects do not load, check the default address or chain network.'
   }
 
   if (projectCount > 0 && query) {

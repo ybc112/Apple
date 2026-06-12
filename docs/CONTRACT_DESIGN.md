@@ -176,8 +176,9 @@ This project uses the registry-contract approach:
 
 Frontend integration:
 
-- Set `VITE_AUDIT_REGISTRY_ADDRESS` after deploying `AppleAuditRegistry`.
-- If the address is missing, the page shows a configuration warning instead of fake data.
+- The frontend source defaults to the current BSC `AppleAuditRegistry` address.
+- Use `VITE_AUDIT_REGISTRY_ADDRESS` only when overriding it for a new deployment.
+- If the address is missing or invalid, the page shows a configuration warning instead of fake data.
 - If the connected wallet is the registry owner, the frontend shows auditor approval controls.
 - If the connected wallet is an approved auditor, the frontend enables project-review submission.
 
@@ -201,7 +202,7 @@ The Swap page is a real frontend integration with PancakeSwap V2 Router on BNB C
 2. Deploy `AppleLaunchFactory(feeRecipient, creationFee, pancakeRouter, tokenDeployer, vaultDeployer)`.
 3. Bind both deployers to the Factory with `setFactory(factory)`.
 4. Deploy `AppleAuditRegistry`.
-5. Set `VITE_LAUNCHPAD_FACTORY_ADDRESS` and `VITE_AUDIT_REGISTRY_ADDRESS`.
+5. The frontend source defaults to the current BSC Factory and Audit Registry addresses; update the constants or use `VITE_LAUNCHPAD_FACTORY_ADDRESS` / `VITE_AUDIT_REGISTRY_ADDRESS` only when overriding them.
 6. User connects wallet and calls `createLaunch`.
 7. Factory deploys token and vault.
 8. Factory transfers all token supply into the vault.

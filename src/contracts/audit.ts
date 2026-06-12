@@ -1,7 +1,7 @@
 import { Contract, Interface, JsonRpcProvider, isAddress } from 'ethers'
 import { BNB_CHAIN } from '../data'
 import type { EthereumProvider } from '../wallet'
-import { launchpadConfig } from './launchpad'
+import { DEFAULT_AUDIT_REGISTRY_ADDRESS, launchpadConfig } from './launchpad'
 
 export type AuditLocale = 'zh' | 'en'
 export type AuditorStatus = 0 | 1 | 2
@@ -36,7 +36,7 @@ export type AuditTransactionResult = {
 
 export const auditRegistryConfig = {
   chainId: Number(import.meta.env.VITE_LAUNCHPAD_CHAIN_ID ?? 56),
-  registryAddress: String(import.meta.env.VITE_AUDIT_REGISTRY_ADDRESS ?? ''),
+  registryAddress: String(import.meta.env.VITE_AUDIT_REGISTRY_ADDRESS || DEFAULT_AUDIT_REGISTRY_ADDRESS),
 }
 
 export const isAuditRegistryConfigured =
@@ -55,7 +55,7 @@ export const auditRegistryAbi = [
 
 const messages = {
   zh: {
-    notConfigured: '审核 Registry 未配置：部署 AppleAuditRegistry 后设置 VITE_AUDIT_REGISTRY_ADDRESS。',
+    notConfigured: '审核 Registry 地址无效：前端源码已内置当前 Registry 地址，请检查默认地址或覆盖配置。',
     wrongNetwork: '当前钱包网络不是 BNB Smart Chain，请先切换网络。',
     connectWallet: '请先连接钱包。',
     invalidProfile: '请填写审核员资料链接或简介 URI。',
@@ -65,7 +65,7 @@ const messages = {
     invalidReport: '请填写审核报告链接或报告 URI。',
   },
   en: {
-    notConfigured: 'Audit Registry is not configured. Deploy AppleAuditRegistry and set VITE_AUDIT_REGISTRY_ADDRESS.',
+    notConfigured: 'Audit Registry address is invalid. The current Registry address is built into the frontend source; check the default address or override config.',
     wrongNetwork: 'The connected wallet is not on BNB Smart Chain. Please switch networks first.',
     connectWallet: 'Please connect your wallet first.',
     invalidProfile: 'Enter an auditor profile link or profile URI.',

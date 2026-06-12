@@ -24,10 +24,22 @@ const configuredVanitySuffix = String(import.meta.env.VITE_VANITY_SUFFIX ?? '')
   .replace(/^0x/i, '')
   .toLowerCase()
 
+export const DEFAULT_LAUNCHPAD_FACTORY_ADDRESS = '0xB3869F838dBC8D9886653FC1d77f49d88B0B273D'
+export const DEFAULT_AUDIT_REGISTRY_ADDRESS = '0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084'
+const DEFAULT_CREATION_FEE_WEI = '5000000000000000'
+
+function envAddressOrDefault(value: unknown, fallback: string) {
+  const address = String(value ?? '').trim()
+  return isAddress(address) ? address : fallback
+}
+
 export const launchpadConfig = {
   chainId: Number(import.meta.env.VITE_LAUNCHPAD_CHAIN_ID ?? 56),
-  factoryAddress: String(import.meta.env.VITE_LAUNCHPAD_FACTORY_ADDRESS ?? ''),
-  creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? '5000000000000000'),
+  factoryAddress: envAddressOrDefault(
+    import.meta.env.VITE_LAUNCHPAD_FACTORY_ADDRESS,
+    DEFAULT_LAUNCHPAD_FACTORY_ADDRESS,
+  ),
+  creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? DEFAULT_CREATION_FEE_WEI),
   hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
   backendUrl: normalizeBackendBaseUrl(String(import.meta.env.VITE_APP_BACKEND_URL ?? '')),
   vanitySuffix: configuredVanitySuffix && configuredVanitySuffix !== '5555' ? configuredVanitySuffix : 'aaaa',
@@ -188,7 +200,7 @@ type VanitySaltResult = {
 
 const messages = {
   zh: {
-    factoryMissing: '发射工厂未配置：请先部署 Factory，并设置 VITE_LAUNCHPAD_FACTORY_ADDRESS。',
+    factoryMissing: '发射工厂地址无效：前端源码已内置当前 Factory 地址，请检查默认地址或覆盖配置。',
     wrongNetwork: '当前钱包网络不是 BNB Smart Chain，请先切换网络。',
     connectWallet: '请先连接钱包。',
     txFailed: '链上交易执行失败，请在区块浏览器查看失败原因。',
@@ -221,7 +233,7 @@ const messages = {
     vanityUnavailable: '本次没有匹配到 AAAA 靓号地址，请重新点击部署再试一次。',
   },
   en: {
-    factoryMissing: 'Launch Factory is not configured. Deploy the Factory and set VITE_LAUNCHPAD_FACTORY_ADDRESS first.',
+    factoryMissing: 'Launch Factory address is invalid. The current Factory address is built into the frontend source; check the default address or override config.',
     wrongNetwork: 'The connected wallet is not on BNB Smart Chain. Please switch networks first.',
     connectWallet: 'Please connect your wallet first.',
     txFailed: 'The on-chain transaction failed. Check the block explorer for the failure reason.',
