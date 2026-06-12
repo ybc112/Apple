@@ -1085,6 +1085,24 @@ a {
   grid-column: 1 / -1;
 }
 
+.whitelist-mode-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(141, 247, 196, 0.28);
+  border-radius: var(--radius);
+  color: var(--accent);
+  background: rgba(141, 247, 196, 0.08);
+  font-weight: 900;
+}
+
+.whitelist-mode-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .whitelist-fields {
   display: grid;
   grid-template-columns: minmax(150px, 0.58fr) minmax(0, 1fr);

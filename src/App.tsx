@@ -44,6 +44,7 @@ import {
   queueProjectVerification,
   readLaunchCreatedToken,
   setProjectWhitelistAllowances,
+  setProjectWhitelistEnabled,
   type WhitelistAllowanceEntry,
   waitForTransactionReceipt,
   watchLaunchProjectEvents,
@@ -145,6 +146,8 @@ const copy = {
       confirmWhitelist: '请在钱包里确认白名单列表交易。',
       whitelistSubmitted: (hash: string) => `白名单交易已提交：${hash}，正在等待链上确认。`,
       whitelistConfirmed: '白名单列表已写入链上。',
+      confirmWhitelistMode: '请在钱包里确认白名单开关交易。',
+      whitelistModeConfirmed: '白名单模式已更新。',
       confirmMintApproval: '请先在钱包里授权付款代币给 Vault。',
       mintApprovalSubmitted: (hash: string) => `Mint 授权已提交：${hash}，正在等待链上确认。`,
       mintApprovalConfirmed: 'Mint 授权已确认，继续提交 mint 交易。',
@@ -227,7 +230,8 @@ const copy = {
       whitelistAllowance: '白名单列表',
       whitelistSubmit: '批量保存',
       whitelistPending: '等待确认',
-      whitelistBatchHint: '单次最多识别 200 个地址；名单地址数量不能超过项目设置的白名单份数。',
+      whitelistBatchHint: '单次最多识别 200 个地址；名单地址数量可超过白名单份数。',
+      openPublicMint: '开放公开 Mint',
       mint: 'Mint',
       mintQuantity: 'Mint 数量',
       mintCost: (amount: string) => `合计 ${amount}`,
@@ -436,6 +440,8 @@ const copy = {
       confirmWhitelist: 'Confirm the whitelist list transaction in your wallet.',
       whitelistSubmitted: (hash: string) => `Whitelist transaction submitted: ${hash}. Waiting for confirmation.`,
       whitelistConfirmed: 'Whitelist list is now recorded on-chain.',
+      confirmWhitelistMode: 'Confirm the whitelist mode transaction in your wallet.',
+      whitelistModeConfirmed: 'Whitelist mode has been updated.',
       confirmMintApproval: 'Approve the payment token for the Vault first.',
       mintApprovalSubmitted: (hash: string) => `Mint approval submitted: ${hash}. Waiting for confirmation.`,
       mintApprovalConfirmed: 'Mint approval confirmed. Continue with the mint transaction.',
@@ -518,7 +524,8 @@ const copy = {
       whitelistAllowance: 'Whitelist list',
       whitelistSubmit: 'Batch save',
       whitelistPending: 'Waiting',
-      whitelistBatchHint: 'Up to 200 addresses per transaction. Listed address count cannot exceed the whitelist slots.',
+      whitelistBatchHint: 'Up to 200 addresses per transaction. Listed address count may exceed whitelist slots.',
+      openPublicMint: 'Open public mint',
       mint: 'Mint',
       mintQuantity: 'Mint quantity',
       mintCost: (amount: string) => `Total ${amount}`,
@@ -1221,6 +1228,41 @@ function App() {
     }
   }
 
+  const submitWhitelistMode = async (project: LaunchProject, enabled: boolean) => {
+    const provider = getProvider()
+    if (!provider) {
+      setNotice({ kind: 'error', message: text.wallet.noProviderForTx })
+      return
+    }
+
+    setNotice({ kind: 'info', message: text.notice.confirmWhitelistMode })
+
+    try {
+      if (wallet.account && !onTargetNetwork) {
+        await switchNetwork()
+      }
+
+      if (!wallet.account) {
+        const accounts = await requestAccounts(provider)
+        const chainId = await getChainId(provider)
+        setWallet({
+          account: accounts[0] ?? '',
+          chainId,
+          status: accounts[0] ? 'connected' : 'idle',
+          error: accounts[0] ? '' : text.wallet.noAccount,
+        })
+      }
+
+      const result = await setProjectWhitelistEnabled(provider, project.vault, enabled, language)
+      setNotice({ kind: 'info', message: text.notice.whitelistSubmitted(shortHash(result.hash)) })
+      await waitForTransactionReceipt(provider, result.hash, 120_000, language)
+      setNotice({ kind: 'success', message: text.notice.whitelistModeConfirmed })
+      setProjectsRefreshKey((current) => current + 1)
+    } catch (error) {
+      setNotice({ kind: 'error', message: readProviderErrorMessage(error) })
+    }
+  }
+
   const submitProjectMint = async (project: LaunchProject, quantity: string) => {
     try {
       const provider = await prepareWalletTransaction()
@@ -1517,6 +1559,7 @@ function App() {
           submitProjectMint={submitProjectMint}
           submitProjectRefund={submitProjectRefund}
           submitWhitelistAllowances={submitWhitelistAllowances}
+          submitWhitelistMode={submitWhitelistMode}
           text={text}
           wallet={wallet}
         />
@@ -1721,6 +1764,7 @@ function HomePage({
   submitProjectMint,
   submitProjectRefund,
   submitWhitelistAllowances,
+  submitWhitelistMode,
   text,
   wallet,
 }: {
@@ -1736,6 +1780,7 @@ function HomePage({
   submitProjectMint: (project: LaunchProject, quantity: string) => Promise<void>
   submitProjectRefund: (project: LaunchProject) => Promise<void>
   submitWhitelistAllowances: (project: LaunchProject, entries: WhitelistAllowanceEntry[]) => Promise<void>
+  submitWhitelistMode: (project: LaunchProject, enabled: boolean) => Promise<void>
   text: (typeof copy)[Language]
   wallet: WalletState
 }) {
@@ -1894,6 +1939,7 @@ function HomePage({
                 submitProjectMint={submitProjectMint}
                 submitProjectRefund={submitProjectRefund}
                 submitWhitelistAllowances={submitWhitelistAllowances}
+                submitWhitelistMode={submitWhitelistMode}
                 text={text}
                 wallet={wallet}
               />
@@ -1958,6 +2004,7 @@ function ProjectCard({
   submitProjectMint,
   submitProjectRefund,
   submitWhitelistAllowances,
+  submitWhitelistMode,
   text,
   wallet,
 }: {
@@ -1968,6 +2015,7 @@ function ProjectCard({
   submitProjectMint: (project: LaunchProject, quantity: string) => Promise<void>
   submitProjectRefund: (project: LaunchProject) => Promise<void>
   submitWhitelistAllowances: (project: LaunchProject, entries: WhitelistAllowanceEntry[]) => Promise<void>
+  submitWhitelistMode: (project: LaunchProject, enabled: boolean) => Promise<void>
   text: (typeof copy)[Language]
   wallet: WalletState
 }) {
@@ -1977,6 +2025,7 @@ function ProjectCard({
   const [whitelistBatch, setWhitelistBatch] = useState('')
   const [whitelistError, setWhitelistError] = useState('')
   const [whitelistSaving, setWhitelistSaving] = useState(false)
+  const [whitelistModeSaving, setWhitelistModeSaving] = useState(false)
   const [refundPending, setRefundPending] = useState(false)
   const detectedWhitelistCount = collectWhitelistAccounts(whitelistBatch).length
   const progress = Math.min(100, Math.max(0, project.progress))
@@ -1986,7 +2035,6 @@ function ProjectCard({
   const whitelistTotal = Number(project.whitelistMintCount)
   const whitelistMinted = Number(project.whitelistMintedCount)
   const totalWhitelistListed = Number(project.totalWhitelistAllowance || '0')
-  const whitelistConfigRemaining = Math.max(0, whitelistTotal - totalWhitelistListed)
   const whitelistSlotsRemaining = Math.max(0, whitelistTotal - whitelistMinted)
   const userWhitelistRemaining = Number(project.whitelistRemaining || '0')
   const whitelistPhaseActive = project.whitelistEnabled && whitelistTotal > 0 && whitelistSlotsRemaining > 0
@@ -2180,7 +2228,6 @@ function ProjectCard({
             setWhitelistError('')
             try {
               const entries = parseWhitelistBatch(whitelistBatch, language)
-              validateWhitelistBatchAgainstProject(project, entries, language)
               await submitWhitelistAllowances(project, entries)
               setWhitelistBatch('')
             } catch (error) {
@@ -2197,10 +2244,29 @@ function ProjectCard({
           <div className="whitelist-capacity">
             <span>{language === 'zh' ? '白名单列表' : 'Whitelist list'}</span>
             <strong>
-              {totalWhitelistListed}/{project.whitelistMintCount}
+              {language === 'zh' ? `${totalWhitelistListed} 个地址` : `${totalWhitelistListed} addresses`}
             </strong>
-            <em>{language === 'zh' ? `剩余可加入 ${whitelistConfigRemaining} 个地址` : `${whitelistConfigRemaining} addresses left`}</em>
+            <em>{language === 'zh' ? `白名单剩余 ${whitelistSlotsRemaining} 份` : `${whitelistSlotsRemaining} whitelist slots left`}</em>
           </div>
+          {whitelistPhaseActive && (
+            <button
+              className="whitelist-mode-button"
+              type="button"
+              disabled={whitelistModeSaving}
+              onClick={async () => {
+                setWhitelistModeSaving(true)
+                setWhitelistError('')
+                try {
+                  await submitWhitelistMode(project, false)
+                } finally {
+                  setWhitelistModeSaving(false)
+                }
+              }}
+            >
+              <Rocket size={15} />
+              {whitelistModeSaving ? text.projects.whitelistPending : text.projects.openPublicMint}
+            </button>
+          )}
           <textarea
             className="whitelist-batch-input"
             autoCapitalize="none"
@@ -3686,25 +3752,6 @@ function parseWhitelistBatch(
     account,
     allowance: '1',
   }))
-}
-
-function validateWhitelistBatchAgainstProject(
-  project: LaunchProject,
-  entries: WhitelistAllowanceEntry[],
-  language: Language,
-) {
-  const whitelistLimit = BigInt(project.whitelistMintCount || '0')
-  const listedCount = BigInt(project.totalWhitelistAllowance || '0')
-  const remainingListSlots = whitelistLimit > listedCount ? whitelistLimit - listedCount : 0n
-  const requestedListSlots = BigInt(entries.length)
-
-  if (whitelistLimit > 0n && requestedListSlots > remainingListSlots) {
-    throw new Error(
-      language === 'zh'
-        ? `本次白名单地址数量不能超过剩余 ${remainingListSlots.toString()} 个。`
-        : `This batch cannot exceed the remaining ${remainingListSlots.toString()} whitelist addresses.`,
-    )
-  }
 }
 
 function getMintCostWei(project: LaunchProject, quantity: string) {

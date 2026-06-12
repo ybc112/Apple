@@ -121,6 +121,7 @@ const mintVaultWriteAbi = [
   'function setWhitelistAccounts(address[] accounts,bool listed)',
   'function setWhitelistAllowance(address account,uint256 allowance)',
   'function setWhitelistAllowances(address[] accounts,uint256[] allowances)',
+  'function setWhitelistEnabled(bool enabled)',
   'function claimRefund()',
   'function mint(uint256 quantity) payable',
 ] as const
@@ -478,6 +479,45 @@ export async function setProjectWhitelistAllowances(
 
   const iface = new Interface(mintVaultWriteAbi)
   const data = iface.encodeFunctionData('setWhitelistAllowances', [accounts, allowances])
+  const hash = (await provider.request({
+    method: 'eth_sendTransaction',
+    params: [
+      {
+        from,
+        to: vaultAddress,
+        data,
+      },
+    ],
+  })) as string
+
+  return { hash }
+}
+
+export async function setProjectWhitelistEnabled(
+  provider: EthereumProvider,
+  vaultAddress: string,
+  enabled: boolean,
+  locale: LaunchpadLocale = 'zh',
+): Promise<LaunchTransactionResult> {
+  const text = messages[locale]
+
+  if (!isAddress(vaultAddress)) {
+    throw new Error(text.invalidAddress('Vault'))
+  }
+
+  const chainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
+  if (Number.parseInt(chainId, 16) !== launchpadConfig.chainId) {
+    throw new Error(text.wrongNetwork)
+  }
+
+  const walletAccounts = (await provider.request({ method: 'eth_accounts' })) as string[]
+  const from = walletAccounts[0]
+  if (!from || !isAddress(from)) {
+    throw new Error(text.connectWallet)
+  }
+
+  const iface = new Interface(mintVaultWriteAbi)
+  const data = iface.encodeFunctionData('setWhitelistEnabled', [enabled])
   const hash = (await provider.request({
     method: 'eth_sendTransaction',
     params: [
