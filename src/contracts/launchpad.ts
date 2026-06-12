@@ -47,9 +47,9 @@ const hiddenProjectShortMatches = [
 ]
 
 const BPS_DENOMINATOR = 10_000n
-const MINT_GAS_BUFFER_BPS = 18_000n
-const GAS_PRICE_BUFFER_BPS = 12_000n
-const NATIVE_MINT_GAS_FLOOR = 8_000_000n
+const MINT_GAS_BUFFER_BPS = 12_500n
+const GAS_PRICE_BUFFER_BPS = 10_500n
+const NATIVE_MINT_GAS_FLOOR = 4_600_000n
 
 export const isLaunchpadConfigured =
   Boolean(launchpadConfig.factoryAddress) &&
@@ -633,13 +633,13 @@ export async function mintLaunchProject(
   let gasPrice: string | undefined
 
   try {
-    await assertMintCanExecute(provider, tx)
+    await assertMintCanExecute(tx)
   } catch {
     throw new Error(text.mintEstimateFailed)
   }
 
   try {
-    const estimatedGas = await estimateMintGas(provider, tx)
+    const estimatedGas = await estimateMintGas(tx)
     const bufferedGas = (estimatedGas * MINT_GAS_BUFFER_BPS) / BPS_DENOMINATOR
     const nativeGas = isNativeMint && bufferedGas < NATIVE_MINT_GAS_FLOOR
       ? NATIVE_MINT_GAS_FLOOR
@@ -653,7 +653,8 @@ export async function mintLaunchProject(
   }
 
   try {
-    const currentGasPrice = BigInt(String(await provider.request({ method: 'eth_gasPrice' })))
+    const readProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
+    const currentGasPrice = BigInt(String(await readProvider.send('eth_gasPrice', [])))
     gasPrice = toBeHex((currentGasPrice * GAS_PRICE_BUFFER_BPS) / BPS_DENOMINATOR)
   } catch {
     gasPrice = undefined
@@ -674,34 +675,17 @@ export async function mintLaunchProject(
 }
 
 async function assertMintCanExecute(
-  provider: EthereumProvider,
   tx: { from: string; to: string; value: string; data: string },
 ) {
-  try {
-    await provider.request({
-      method: 'eth_call',
-      params: [tx, 'latest'],
-    })
-    return
-  } catch {
-    const rpcProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
-    await rpcProvider.send('eth_call', [tx, 'latest'])
-  }
+  const rpcProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
+  await rpcProvider.send('eth_call', [tx, 'latest'])
 }
 
 async function estimateMintGas(
-  provider: EthereumProvider,
   tx: { from: string; to: string; value: string; data: string },
 ) {
-  try {
-    return BigInt(String(await provider.request({
-      method: 'eth_estimateGas',
-      params: [tx],
-    })))
-  } catch {
-    const rpcProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
-    return BigInt(String(await rpcProvider.send('eth_estimateGas', [tx])))
-  }
+  const rpcProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
+  return BigInt(String(await rpcProvider.send('eth_estimateGas', [tx])))
 }
 
 export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]> {
