@@ -6,7 +6,7 @@ This backend keeps secret operational logic out of the browser.
 
 - Watches the configured Factory for new projects.
 - Queues BscScan verification for each new project Token and Vault.
-- Exposes a vanity salt API for fixed token address suffixes such as `5555` or `aaaa`.
+- Exposes a vanity salt API for fixed token address suffixes such as `aaaa`.
 
 ## Run
 
@@ -35,7 +35,7 @@ Frontend environment:
 
 ```bash
 VITE_APP_BACKEND_URL=https://your-backend.example
-VITE_VANITY_SUFFIX=5555
+VITE_VANITY_SUFFIX=aaaa
 ```
 
 For a Netlify frontend proxy, use:
@@ -67,7 +67,7 @@ The backend runs the same verification command automatically when it sees new Fa
 
 `POST /api/vanity-salt`
 
-The backend searches a CREATE2 salt that makes the predicted Token address end with the requested suffix. Four hex characters such as `5555` or `aaaa` average about 65,536 attempts.
+The backend searches a CREATE2 salt that makes the predicted Token address end with the requested suffix. Four hex characters such as `aaaa` average about 65,536 attempts.
 
 The salt only stays valid for the exact launch parameters, creator wallet, Factory address, and chain id used during the search.
 

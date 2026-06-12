@@ -192,7 +192,7 @@ function runVerify(token) {
 }
 
 async function findVanitySalt(body) {
-  const suffix = String(body.suffix ?? "5555").toLowerCase().replace(/^0x/, "");
+  const suffix = String(body.suffix ?? "aaaa").toLowerCase().replace(/^0x/, "");
   if (!/^[0-9a-f]{1,4}$/.test(suffix)) {
     throw new Error("suffix must be 1-4 hex characters.");
   }

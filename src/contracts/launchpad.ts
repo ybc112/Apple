@@ -25,7 +25,7 @@ export const launchpadConfig = {
   creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? '5000000000000000'),
   hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
   backendUrl: normalizeBackendBaseUrl(String(import.meta.env.VITE_APP_BACKEND_URL ?? '')),
-  vanitySuffix: String(import.meta.env.VITE_VANITY_SUFFIX ?? '5555').trim().replace(/^0x/i, '').toLowerCase(),
+  vanitySuffix: String(import.meta.env.VITE_VANITY_SUFFIX ?? 'aaaa').trim().replace(/^0x/i, '').toLowerCase(),
   contractAdapterReady: true,
 }
 
@@ -620,7 +620,7 @@ export async function mintLaunchProject(
       method: 'eth_estimateGas',
       params: [tx],
     })))
-    gas = toBeHex((estimatedGas * 120n) / 100n)
+    gas = toBeHex((estimatedGas * 180n) / 100n)
   } catch {
     throw new Error(text.mintEstimateFailed)
   }
