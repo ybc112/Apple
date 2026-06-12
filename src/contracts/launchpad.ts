@@ -19,13 +19,18 @@ import type { EthereumProvider } from '../wallet'
 
 export type LaunchpadLocale = 'zh' | 'en'
 
+const configuredVanitySuffix = String(import.meta.env.VITE_VANITY_SUFFIX ?? '')
+  .trim()
+  .replace(/^0x/i, '')
+  .toLowerCase()
+
 export const launchpadConfig = {
   chainId: Number(import.meta.env.VITE_LAUNCHPAD_CHAIN_ID ?? 56),
   factoryAddress: String(import.meta.env.VITE_LAUNCHPAD_FACTORY_ADDRESS ?? ''),
   creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? '5000000000000000'),
   hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
   backendUrl: normalizeBackendBaseUrl(String(import.meta.env.VITE_APP_BACKEND_URL ?? '')),
-  vanitySuffix: String(import.meta.env.VITE_VANITY_SUFFIX ?? 'aaaa').trim().replace(/^0x/i, '').toLowerCase(),
+  vanitySuffix: configuredVanitySuffix && configuredVanitySuffix !== '5555' ? configuredVanitySuffix : 'aaaa',
   contractAdapterReady: true,
 }
 
