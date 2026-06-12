@@ -55,8 +55,12 @@ const hiddenProjectShortMatches = [
 
 const BPS_DENOMINATOR = 10_000n
 const MINT_GAS_BUFFER_BPS = 12_500n
+const LAUNCH_GAS_BUFFER_BPS = 12_000n
 const GAS_PRICE_BUFFER_BPS = 10_500n
 const NATIVE_MINT_GAS_FLOOR = 4_600_000n
+const LAUNCH_GAS_LIMIT_CAP = 28_000_000n
+const MAX_ONCHAIN_METADATA_BYTES = 4_096
+const MAX_METADATA_TEXT_LENGTH = 480
 const MINTED_EVENT_TOPIC = id('Minted(address,uint256,uint256,uint256,uint256,uint256)')
 const LAUNCH_FINALIZED_EVENT_TOPIC = id('LaunchFinalized(uint256)')
 const TRADING_ENABLED_EVENT_TOPIC = id('TradingEnabled()')
@@ -73,6 +77,10 @@ export const launchFactoryAbi = [
   'function getProject(address token) view returns ((address creator,address token,address vault,address paymentToken,address receiver,address platformFeeReceiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,uint256 maxMintPerWallet,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 transferTaxBps,uint16 addLiquidityTaxBps,uint16 removeLiquidityTaxBps,uint16 launchProtectionTaxBps,uint16 launchProtectionBlocks,uint32 claimWait,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps))',
   'function projects(address) view returns (address creator,address token,address vault,address paymentToken,address receiver,address platformFeeReceiver,bytes32 templateId,uint256 totalSupply,uint256 mintCount,uint256 whitelistMintCount,uint256 publicMintCount,uint256 mintPrice,uint256 maxMintPerWallet,bool whitelistEnabled,string metadataUri,uint64 createdAt,address rewardToken,uint256 rewardThreshold,uint16 buyTaxBps,uint16 sellTaxBps,uint16 transferTaxBps,uint16 addLiquidityTaxBps,uint16 removeLiquidityTaxBps,uint16 launchProtectionTaxBps,uint16 launchProtectionBlocks,uint32 claimWait,uint16 fundFeeBps,uint16 lpFeeBps,uint16 dividendFeeBps,uint16 burnFeeBps)',
   'event LaunchCreated(address indexed creator,address indexed token,address indexed vault,bytes32 templateId,string name,string symbol,uint256 totalSupply,uint256 mintCount,uint256 mintPrice,address paymentToken,bool whitelistEnabled,string metadataUri)',
+  'error InvalidParams()',
+  'error InvalidFee()',
+  'error InvalidTokenSuffix(address token,uint16 requiredSuffix)',
+  'error ZeroAddress()',
 ] as const
 
 const previousLaunchFactoryAbi = [
@@ -288,20 +296,52 @@ export async function createLaunchToken(
     throw new Error(text.connectWallet)
   }
 
-  const params = toFactoryParams(draft, locale)
+  const params = await toFactoryParams(draft, locale)
   const iface = new Interface(launchFactoryAbi)
   const vanity = await resolveLaunchSalt(from, params, locale)
   const salt = vanity.salt
   const data = iface.encodeFunctionData('createLaunch', [params, salt])
+  const tx = {
+    from,
+    to: launchpadConfig.factoryAddress,
+    value: toQuantity(BigInt(launchpadConfig.creationFeeWei)),
+    data,
+  }
+  const readProvider = new JsonRpcProvider(BNB_CHAIN.rpcUrls[0], launchpadConfig.chainId)
+  let gas: string
+  let gasPrice: string | undefined
+
+  try {
+    await assertLaunchCanExecute(readProvider, tx, iface, locale)
+  } catch (error) {
+    throw new Error(readLaunchPreflightMessage(error, iface, locale))
+  }
+
+  try {
+    const estimatedGas = await estimateLaunchGas(readProvider, tx)
+    const bufferedGas = (estimatedGas * LAUNCH_GAS_BUFFER_BPS) / BPS_DENOMINATOR
+    if (bufferedGas > LAUNCH_GAS_LIMIT_CAP) {
+      throw new Error(readLaunchPreflightMessage('launch-gas-too-high', iface, locale))
+    }
+    gas = toQuantity(bufferedGas)
+  } catch (error) {
+    throw new Error(readLaunchPreflightMessage(error, iface, locale))
+  }
+
+  try {
+    const currentGasPrice = BigInt(String(await readProvider.send('eth_gasPrice', [])))
+    gasPrice = toQuantity((currentGasPrice * GAS_PRICE_BUFFER_BPS) / BPS_DENOMINATOR)
+  } catch {
+    gasPrice = undefined
+  }
 
   const hash = (await provider.request({
     method: 'eth_sendTransaction',
     params: [
       {
-        from,
-        to: launchpadConfig.factoryAddress,
-        value: toQuantity(BigInt(launchpadConfig.creationFeeWei)),
-        data,
+        ...tx,
+        gas,
+        ...(gasPrice ? { gasPrice } : {}),
       },
     ],
   })) as string
@@ -811,6 +851,22 @@ async function estimateMintGas(
   return BigInt(String(await rpcProvider.send('eth_estimateGas', [tx])))
 }
 
+async function assertLaunchCanExecute(
+  rpcProvider: JsonRpcProvider,
+  tx: { from: string; to: string; value: string; data: string },
+  _iface: Interface,
+  _locale: LaunchpadLocale,
+) {
+  await rpcProvider.send('eth_call', [tx, 'latest'])
+}
+
+async function estimateLaunchGas(
+  rpcProvider: JsonRpcProvider,
+  tx: { from: string; to: string; value: string; data: string },
+) {
+  return BigInt(String(await rpcProvider.send('eth_estimateGas', [tx])))
+}
+
 export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]> {
   if (!isLaunchpadConfigured) {
     return []
@@ -1038,7 +1094,7 @@ export function watchLaunchProjectEvents(projects: LaunchProject[], onUpdate: ()
   }
 }
 
-function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLaunchParams {
+async function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): Promise<FactoryLaunchParams> {
   const text = messages[locale]
   const form = draft.form
   const advancedTax = draft.advancedTax
@@ -1052,7 +1108,7 @@ function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): FactoryLa
   return {
     name: form.tokenName.trim(),
     symbol: form.symbol.trim().toUpperCase(),
-    metadataUri: buildMetadata(draft),
+    metadataUri: await buildMetadata(draft),
     totalSupply: parseUnits(form.supply, 18),
     mintCount: mintQuota.total,
     mintPrice,
@@ -1299,14 +1355,16 @@ function percentToBps(value: number) {
   return Math.round(value * 100)
 }
 
-function buildMetadata(draft: LaunchDraft) {
-  return JSON.stringify({
-    description: draft.form.description,
-    avatar: draft.avatar,
-    website: draft.form.website,
-    telegram: draft.form.telegram,
-    x: draft.form.xLink,
-  })
+async function buildMetadata(draft: LaunchDraft) {
+  const metadata: ProjectMetadata = {
+    description: trimMetadataText(draft.form.description),
+    avatar: await resolveMetadataAvatar(draft.avatar),
+    website: trimMetadataText(draft.form.website),
+    telegram: trimMetadataText(draft.form.telegram),
+    x: trimMetadataText(draft.form.xLink),
+  }
+
+  return compactMetadata(metadata)
 }
 
 function parseMetadata(metadataUri: string): ProjectMetadata {
@@ -1316,6 +1374,156 @@ function parseMetadata(metadataUri: string): ProjectMetadata {
   } catch {
     return {}
   }
+}
+
+async function resolveMetadataAvatar(avatar: string) {
+  const nextAvatar = String(avatar ?? '').trim()
+  if (!nextAvatar) {
+    return ''
+  }
+  if (!nextAvatar.startsWith('data:')) {
+    return trimMetadataText(nextAvatar)
+  }
+  if (!launchpadConfig.backendUrl) {
+    return ''
+  }
+
+  try {
+    const response = await fetch(buildBackendUrl('/api/assets'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dataUrl: nextAvatar }),
+    })
+    if (!response.ok) {
+      return ''
+    }
+
+    const result = (await response.json()) as { ok?: boolean; url?: string }
+    return result.ok && result.url ? trimMetadataText(result.url) : ''
+  } catch {
+    return ''
+  }
+}
+
+function compactMetadata(metadata: ProjectMetadata) {
+  const cleaned = {
+    description: metadata.description || '',
+    avatar: metadata.avatar || '',
+    website: metadata.website || '',
+    telegram: metadata.telegram || '',
+    x: metadata.x || '',
+  }
+  let output = JSON.stringify(cleaned)
+  if (readMetadataBytes(output) <= MAX_ONCHAIN_METADATA_BYTES) {
+    return output
+  }
+
+  cleaned.avatar = ''
+  cleaned.description = trimMetadataText(cleaned.description, 180)
+  output = JSON.stringify(cleaned)
+  if (readMetadataBytes(output) <= MAX_ONCHAIN_METADATA_BYTES) {
+    return output
+  }
+
+  return JSON.stringify({
+    description: trimMetadataText(cleaned.description, 80),
+    avatar: '',
+    website: trimMetadataText(cleaned.website, 160),
+    telegram: trimMetadataText(cleaned.telegram, 160),
+    x: trimMetadataText(cleaned.x, 160),
+  })
+}
+
+function trimMetadataText(value: unknown, maxLength = MAX_METADATA_TEXT_LENGTH) {
+  return String(value ?? '').trim().slice(0, maxLength)
+}
+
+function readMetadataBytes(value: string) {
+  return new TextEncoder().encode(value).length
+}
+
+function readLaunchPreflightMessage(error: unknown, iface: Interface, locale: LaunchpadLocale) {
+  if (error === 'launch-gas-too-high') {
+    return locale === 'zh'
+      ? '部署数据过大，钱包无法稳定预估 Gas。请缩短简介或移除过大的图片后再试。'
+      : 'Deployment data is too large for stable gas estimation. Shorten the intro or remove large images, then try again.'
+  }
+
+  const data = readRpcErrorData(error)
+  if (data) {
+    try {
+      const parsed = iface.parseError(data)
+      if (parsed?.name === 'InvalidParams') {
+        return locale === 'zh'
+          ? '部署参数被合约拒绝：请确认只能使用 BNB mint，公开份数+白名单份数大于 0，单次价格大于 0，税收分配不超过 100%，单项税率不超过 25%。'
+          : 'The contract rejected the deployment params. Use BNB mint only, keep public + whitelist count above 0, price above 0, allocation at or below 100%, and each tax at or below 25%.'
+      }
+      if (parsed?.name === 'InvalidFee') {
+        return locale === 'zh'
+          ? '部署手续费不足或手续费接收失败，请保留 0.005 BNB 和足够 Gas 后重试。'
+          : 'The deployment fee is insufficient or could not be collected. Keep 0.005 BNB plus gas and try again.'
+      }
+      if (parsed?.name === 'InvalidTokenSuffix') {
+        return locale === 'zh'
+          ? '本次 AAAA 靓号 salt 未命中链上校验，请重新点击部署生成新的靓号参数。'
+          : 'The AAAA vanity salt did not pass the on-chain suffix check. Click deploy again to generate a new salt.'
+      }
+      if (parsed?.name === 'ZeroAddress') {
+        return locale === 'zh'
+          ? '部署参数里有空地址，请检查接收钱包、路由或工厂配置。'
+          : 'A zero address was found in deployment params. Check receiver, router, or factory config.'
+      }
+    } catch {
+      // Fall through to the generic deployment estimate message.
+    }
+  }
+
+  if (error instanceof Error && error.message && !/missing revert data|execution reverted|estimateGas/i.test(error.message)) {
+    return error.message
+  }
+
+  return locale === 'zh'
+    ? '当前参数无法预估部署 Gas。请确认钱包在 BSC、余额足够、付款方式为 BNB，并缩短项目简介/图片后重试。'
+    : 'Unable to estimate deployment gas. Confirm BSC network, enough balance, BNB payment, and shorter project intro/image, then try again.'
+}
+
+function readRpcErrorData(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return ''
+  }
+
+  const record = error as Record<string, unknown>
+  const data = record.data
+  if (typeof data === 'string' && /^0x[0-9a-fA-F]+$/.test(data) && data !== '0x') {
+    return data
+  }
+  if (data && typeof data === 'object') {
+    const nested = readRpcErrorData(data)
+    if (nested) {
+      return nested
+    }
+  }
+
+  for (const key of ['error', 'info']) {
+    const nested = record[key]
+    if (nested && typeof nested === 'object') {
+      const nestedData = readRpcErrorData(nested)
+      if (nestedData) {
+        return nestedData
+      }
+    }
+  }
+
+  const body = record.body
+  if (typeof body === 'string') {
+    try {
+      return readRpcErrorData(JSON.parse(body))
+    } catch {
+      return ''
+    }
+  }
+
+  return ''
 }
 
 function formatMintPrice(value: bigint, paymentToken: string) {

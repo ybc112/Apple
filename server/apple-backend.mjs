@@ -1,8 +1,10 @@
 import "dotenv/config";
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import fs from "node:fs";
+import path from "node:path";
 import {
   Contract,
   ContractFactory,
@@ -44,6 +46,8 @@ const verifyRetryLimit = Number(process.env.VERIFY_RETRY_LIMIT ?? 5);
 const rateWindowMs = Number(process.env.APPLE_RATE_WINDOW_MS ?? 60000);
 const verifyRateLimit = Number(process.env.APPLE_VERIFY_RATE_LIMIT ?? 30);
 const vanityRateLimit = Number(process.env.APPLE_VANITY_RATE_LIMIT ?? 6);
+const assetRateLimit = Number(process.env.APPLE_ASSET_RATE_LIMIT ?? 20);
+const assetDir = path.resolve(process.env.APPLE_ASSET_DIR ?? path.join(rootDir, "work", "assets"));
 const jobs = new Map();
 const rateBuckets = new Map();
 let lastTokenCount = 0;
@@ -75,6 +79,19 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/verify-status") {
       const token = normalizeAddress(url.searchParams.get("token") ?? "");
       sendJson(response, 200, { token, job: jobs.get(token.toLowerCase()) ?? null });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/assets/")) {
+      await sendAsset(response, url.pathname);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/assets") {
+      limitRequest(request, "asset", assetRateLimit);
+      const body = await readBody(request);
+      const asset = await saveDataUrlAsset(body.dataUrl, request);
+      sendJson(response, 201, { ok: true, ...asset });
       return;
     }
 
@@ -344,6 +361,91 @@ async function assertFactoryProject(token) {
   if (String(project.token).toLowerCase() !== token.toLowerCase()) {
     throw new Error("Token is not indexed by the configured Factory.");
   }
+}
+
+async function saveDataUrlAsset(dataUrl, request) {
+  const raw = String(dataUrl ?? "");
+  const match = /^data:(image\/(?:png|jpeg|jpg|webp|gif|svg\+xml));base64,([a-zA-Z0-9+/=]+)$/i.exec(raw);
+  if (!match) {
+    throw new Error("Invalid asset data URL.");
+  }
+
+  const mimeType = normalizeAssetMimeType(match[1]);
+  const bytes = Buffer.from(match[2], "base64");
+  if (!bytes.length || bytes.length > 260 * 1024) {
+    throw new Error("Asset is too large.");
+  }
+
+  const hash = createHash("sha256").update(mimeType).update(bytes).digest("hex");
+  const filename = `${hash.slice(0, 32)}.${assetExtension(mimeType)}`;
+  fs.mkdirSync(assetDir, { recursive: true });
+  const filePath = path.join(assetDir, filename);
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, bytes);
+  }
+
+  return {
+    url: `${publicBaseUrl(request)}/assets/${filename}`,
+    mimeType,
+    bytes: bytes.length,
+  };
+}
+
+async function sendAsset(response, pathname) {
+  const filename = path.basename(decodeURIComponent(pathname));
+  if (!/^[0-9a-f]{32}\.(?:png|jpg|webp|gif|svg)$/.test(filename)) {
+    sendJson(response, 404, { error: "Not found" });
+    return;
+  }
+
+  const filePath = path.join(assetDir, filename);
+  if (!fs.existsSync(filePath)) {
+    sendJson(response, 404, { error: "Not found" });
+    return;
+  }
+
+  const mimeType = mimeTypeForAsset(filename);
+  response.writeHead(200, {
+    "content-type": mimeType,
+    "cache-control": "public, max-age=31536000, immutable",
+  });
+  fs.createReadStream(filePath).pipe(response);
+}
+
+function publicBaseUrl(request) {
+  const configured = String(process.env.APPLE_PUBLIC_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  if (configured) {
+    return configured;
+  }
+
+  const proto = String(request.headers["x-forwarded-proto"] ?? "http").split(",")[0].trim() || "http";
+  const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? `localhost:${port}`;
+  return `${proto}://${host}`;
+}
+
+function normalizeAssetMimeType(mimeType) {
+  const lower = String(mimeType).toLowerCase();
+  return lower === "image/jpg" ? "image/jpeg" : lower;
+}
+
+function assetExtension(mimeType) {
+  if (mimeType === "image/jpeg") {
+    return "jpg";
+  }
+  if (mimeType === "image/svg+xml") {
+    return "svg";
+  }
+  return mimeType.replace("image/", "");
+}
+
+function mimeTypeForAsset(filename) {
+  if (filename.endsWith(".jpg")) {
+    return "image/jpeg";
+  }
+  if (filename.endsWith(".svg")) {
+    return "image/svg+xml";
+  }
+  return `image/${filename.split(".").pop()}`;
 }
 
 function normalizeAddress(value) {
