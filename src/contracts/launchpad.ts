@@ -31,17 +31,9 @@ export const DEFAULT_LAUNCHPAD_FACTORY_ADDRESS = '0x1aaB224fDb05bAC96d49557c8928
 export const DEFAULT_AUDIT_REGISTRY_ADDRESS = '0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084'
 const DEFAULT_CREATION_FEE_WEI = '5000000000000000'
 
-function envAddressOrDefault(value: unknown, fallback: string) {
-  const address = String(value ?? '').trim()
-  return isAddress(address) ? address : fallback
-}
-
 export const launchpadConfig = {
   chainId: Number(import.meta.env.VITE_LAUNCHPAD_CHAIN_ID ?? 56),
-  factoryAddress: envAddressOrDefault(
-    import.meta.env.VITE_LAUNCHPAD_FACTORY_ADDRESS,
-    DEFAULT_LAUNCHPAD_FACTORY_ADDRESS,
-  ),
+  factoryAddress: DEFAULT_LAUNCHPAD_FACTORY_ADDRESS,
   creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? DEFAULT_CREATION_FEE_WEI),
   hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
   backendUrl: normalizeBackendBaseUrl(configuredBackendUrl),
