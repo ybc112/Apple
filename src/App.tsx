@@ -1092,11 +1092,7 @@ function App() {
 
   const updateAllocation = (key: AllocationKey, value: number) => {
     setAllocation((current) => {
-      const otherTotal = Object.entries(current).reduce(
-        (sum, [itemKey, itemValue]) => sum + (itemKey === key ? 0 : itemValue),
-        0,
-      )
-      const nextValue = Math.min(value, Math.max(0, 100 - otherTotal))
+      const nextValue = Math.max(0, Math.min(100, value))
 
       return { ...current, [key]: nextValue }
     })
@@ -3340,9 +3336,11 @@ function SliderField({
       <input
         max={max}
         min={0}
+        step={1}
         type="range"
         value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+        onInput={(event) => onChange(Number(event.currentTarget.value))}
       />
     </label>
   )

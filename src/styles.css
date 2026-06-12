@@ -1652,10 +1652,11 @@ a {
 input[type="range"] {
   appearance: none;
   width: 100%;
-  height: 18px;
+  height: 28px;
   accent-color: var(--accent);
   background: transparent;
   cursor: pointer;
+  touch-action: none;
 }
 
 input[type="range"]::-webkit-slider-runnable-track {
