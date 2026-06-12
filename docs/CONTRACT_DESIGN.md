@@ -119,6 +119,7 @@ Only the vault owner can update the whitelist list. The factory sets the vault o
 - When the final mint slot is filled, the vault sends remaining LP to the black-hole address and calls `AppleToken.finalizeLaunch(pair)`.
 - `AppleToken.finalizeLaunch()` can only be called by the assigned vault.
 - `AppleToken.finalizeLaunch(pair)` marks the liquidity pair as an AMM pair, enables trading, and transfers token ownership to the black-hole address.
+- The finalized liquidity pair is also removed from the dividend tracker, so LP-held tokens cannot receive holder rewards.
 - The vault transfers its own ownership to the black-hole address in the same finalization flow.
 - Before finalization, regular transfers between non-exempt addresses revert with `TradingLocked`.
 - After finalization, trading stays enabled; the auditor registry has no function that can pause or stop token trading.
@@ -136,7 +137,7 @@ The UI fields map to contract fields as follows:
 - `回流` -> `lpFeeBps`, swapped and added as Pancake V2 liquidity, with LP sent to `AppleToken.LP_BLACK_HOLE()`
 - `持币分红` -> `dividendFeeBps`, swapped to the configured reward token and deposited into `AppleDividendDistributor`
 
-The split total can be lower than 100%. The remaining unallocated part of a charged tax goes to the project receiver. The split total cannot exceed 100%, and buy/sell tax cannot exceed 25%.
+The split total can be lower than 100%. The remaining unallocated part of a charged tax goes to the project receiver. The split total cannot exceed 100%, and buy/sell tax cannot exceed 25%. `mintPrice` must be greater than zero so BNB launches cannot finalize without payment liquidity.
 
 Advanced tax controls:
 
@@ -151,6 +152,7 @@ Dividend claiming:
 
 - `unpaidDividend(account)` reads the current claimable reward-token amount.
 - `claimDividend()` distributes the caller's unpaid reward tokens from the distributor.
+- If rewards arrive before any holder meets the dividend threshold, they are kept as `pendingDividends` and distributed when the first eligible holder appears.
 - The frontend project detail page reads `unpaidDividend(connectedWallet)` and submits `claimDividend()` through the connected wallet.
 
 ## Auditor Design
@@ -251,4 +253,5 @@ Current tests cover:
 - Sell tax triggers real swapback: burn reduces supply, platform and marketing buckets swap to native BNB, liquidity bucket adds LP to the black hole, and dividend bucket swaps to reward token for holder claiming.
 - Token-level `mintToken(uint256)` forwards the real caller into the vault, so BscScan-style mint buttons still honor whitelist and public mint accounting.
 - Transfer tax, dividend `claimWait`, and add-liquidity tax are covered by dedicated tests.
+- Zero-price launch rejection, finalized pair dividend exclusion, and pending dividend carry-forward are covered by dedicated tests.
 - Auditor registry covers application, owner approval, approved-auditor-only review submission, review updates, and project review reads.

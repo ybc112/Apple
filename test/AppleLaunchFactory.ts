@@ -357,6 +357,25 @@ describe("AppleLaunchFactory", function () {
     expect(rejected).to.equal(true);
   });
 
+  it("rejects zero-price launches so BNB launches cannot finalize without payment liquidity", async function () {
+    const { creator, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintPrice: 0n,
+    };
+
+    let rejected = false;
+    try {
+      await factory
+        .connect(creator)
+        .createLaunch(params, ethers.id("salt-zero-price"), { value: creationFee });
+    } catch {
+      rejected = true;
+    }
+
+    expect(rejected).to.equal(true);
+  });
+
   it("refunds deployment fee overpayment to the creator", async function () {
     const { owner, creator, creationFee, factory } = await deployFactory();
     const params = launchParams(creator.address);
@@ -724,5 +743,58 @@ describe("AppleLaunchFactory", function () {
     const pairAddress = await getLiquidityPair(router, tokenAddress);
     expect(await token.balanceOf(pairAddress)).to.equal((await vault.liquidityAddedToken()) + addAmount - fee);
     expect(await token.balanceOf(await token.getAddress())).to.equal(fee);
+  });
+
+  it("keeps dividend rewards pending until an eligible holder reaches the threshold", async function () {
+    const { owner, creator, creationFee, factory, router } = await deployFactory();
+    const [, , buyerA, buyerB, buyerC, buyerD] = await ethers.getSigners();
+    const rewardToken = await ethers.deployContract("MockRewardToken");
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 4n,
+      rewardToken: await rewardToken.getAddress(),
+      rewardThreshold: ethers.parseUnits("150000", 18),
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-pending-dividends"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await owner.sendTransaction({
+      to: await router.getAddress(),
+      value: ethers.parseEther("100"),
+    });
+    await token.connect(creator).setSwapSettings(true, 1n);
+    await token.connect(creator).setDistributorGas(0n);
+
+    await vault.connect(buyerA).mint(1n, { value: params.mintPrice });
+    await vault.connect(buyerB).mint(1n, { value: params.mintPrice });
+    await vault.connect(buyerC).mint(1n, { value: params.mintPrice });
+    await vault.connect(buyerD).mint(1n, { value: params.mintPrice });
+
+    const distributorAddress = await token.dividendDistributor();
+    const distributor = await ethers.getContractAt("AppleDividendDistributor", distributorAddress);
+    expect(await distributor.totalShares()).to.equal(0n);
+
+    const pairAddress = await getLiquidityPair(router, tokenAddress);
+    await token.connect(buyerA).transfer(pairAddress, ethers.parseUnits("1000", 18));
+
+    const pendingDividends = await distributor.pendingDividends();
+    expect(pendingDividends > 0n).to.equal(true);
+    expect(await token.unpaidDividend(buyerA.address)).to.equal(0n);
+
+    await token.connect(buyerB).transfer(buyerA.address, ethers.parseUnits("30000", 18));
+
+    expect(await distributor.pendingDividends()).to.equal(0n);
+    const unpaidDividend = await token.unpaidDividend(buyerA.address);
+    expect(unpaidDividend > 0n).to.equal(true);
+
+    await token.connect(buyerA).claimDividend();
+    expect(await rewardToken.balanceOf(buyerA.address)).to.equal(unpaidDividend);
   });
 });

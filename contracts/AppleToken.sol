@@ -71,6 +71,7 @@ contract AppleDividendDistributor {
     uint256 public totalShares;
     uint256 public totalDividends;
     uint256 public totalDistributed;
+    uint256 public pendingDividends;
     uint256 public dividendsPerShare;
     uint256 public currentIndex;
 
@@ -136,18 +137,24 @@ contract AppleDividendDistributor {
             _removeShareholder(shareholder);
         }
 
+        uint256 previousTotalShares = totalShares;
         totalShares = totalShares - shares[shareholder].amount + amount;
         shares[shareholder].amount = amount;
         shares[shareholder].totalExcluded = _cumulativeDividends(amount);
+
+        if (previousTotalShares == 0 && totalShares > 0) {
+            _distributePendingDividends();
+        }
     }
 
     function deposit(uint256 amount) external onlyToken {
-        if (amount == 0 || totalShares == 0) {
+        if (amount == 0) {
             return;
         }
 
         totalDividends += amount;
-        dividendsPerShare += (amount * DIVIDENDS_PER_SHARE_ACCURACY) / totalShares;
+        pendingDividends += amount;
+        _distributePendingDividends();
     }
 
     function process(uint256 gasLimit) external onlyToken {
@@ -259,6 +266,16 @@ contract AppleDividendDistributor {
 
     function _cumulativeDividends(uint256 share) private view returns (uint256) {
         return (share * dividendsPerShare) / DIVIDENDS_PER_SHARE_ACCURACY;
+    }
+
+    function _distributePendingDividends() private {
+        if (pendingDividends == 0 || totalShares == 0) {
+            return;
+        }
+
+        uint256 amount = pendingDividends;
+        pendingDividends = 0;
+        dividendsPerShare += (amount * DIVIDENDS_PER_SHARE_ACCURACY) / totalShares;
     }
 
     function _addShareholder(address shareholder) private {
@@ -518,6 +535,7 @@ contract AppleToken is ERC20, Ownable {
             liquidityPair = pair;
             automatedMarketMakerPairs[pair] = true;
             isDividendExempt[pair] = true;
+            dividendDistributor.excludeFromDividends(pair);
             emit AutomatedMarketMakerPairUpdated(pair, true);
         }
         startTradeBlock = block.number;

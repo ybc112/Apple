@@ -342,7 +342,8 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
         if (
             bytes(params.name).length == 0 || bytes(params.symbol).length == 0
                 || params.totalSupply == 0 || params.mintCount == 0 || params.receiver == address(0)
-                || params.totalSupply < params.mintCount || params.whitelistMintCount > params.mintCount
+                || params.mintPrice == 0 || params.totalSupply < params.mintCount
+                || params.whitelistMintCount > params.mintCount
         ) {
             revert InvalidParams();
         }

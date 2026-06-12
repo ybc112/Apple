@@ -548,13 +548,11 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     }
 
     function _lockLiquidity() private {
-        if (liquidityPair == address(0)) {
-            return;
-        }
-
-        uint256 lpBalance = IERC20(liquidityPair).balanceOf(address(this));
-        if (lpBalance > 0) {
-            IERC20(liquidityPair).safeTransfer(PERMISSION_BLACK_HOLE, lpBalance);
+        if (liquidityPair != address(0)) {
+            uint256 lpBalance = IERC20(liquidityPair).balanceOf(address(this));
+            if (lpBalance > 0) {
+                IERC20(liquidityPair).safeTransfer(PERMISSION_BLACK_HOLE, lpBalance);
+            }
         }
 
         uint256 leftoverToken = IERC20(address(token)).balanceOf(address(this));

@@ -194,7 +194,7 @@ const messages = {
     invalidMintCount: 'mint 次数必须是大于 0 的整数。',
     invalidMintQuota: '公开份数和白名单份数加起来必须大于 0。',
     whitelistNeedsQuota: '开启白名单时，白名单份数必须大于 0。',
-    invalidMintPrice: '单次 mint 价格不能为负数。',
+    invalidMintPrice: '单次 mint 价格必须大于 0。',
     invalidReceiver: '请填写有效的项目接收钱包。',
     allocationOverflow: '税收分配总和不能超过 100%。',
     taxTooHigh: '当前合约限制买卖税最高 25%。',
@@ -227,7 +227,7 @@ const messages = {
     invalidMintCount: 'Mint count must be an integer greater than 0.',
     invalidMintQuota: 'Public and whitelist mint counts must add up to more than 0.',
     whitelistNeedsQuota: 'Whitelist mint count must be greater than 0 when whitelist mode is enabled.',
-    invalidMintPrice: 'Price per mint cannot be negative.',
+    invalidMintPrice: 'Price per mint must be greater than 0.',
     invalidReceiver: 'Please enter a valid project receiver wallet.',
     allocationOverflow: 'Tax allocation cannot exceed 100%.',
     taxTooHigh: 'The current contract limits buy/sell tax to 25%.',
@@ -1051,7 +1051,7 @@ function validateDraftForContract(draft: LaunchDraft, locale: LaunchpadLocale) {
 
   readMintQuota(draft, locale)
 
-  if (!Number.isFinite(Number(form.mintPrice)) || Number(form.mintPrice) < 0) {
+  if (!Number.isFinite(Number(form.mintPrice)) || Number(form.mintPrice) <= 0) {
     throw new Error(text.invalidMintPrice)
   }
 
