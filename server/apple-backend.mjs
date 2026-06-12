@@ -38,6 +38,9 @@ const backendToken = process.env.APPLE_BACKEND_TOKEN ?? "";
 const autoVerify = process.env.AUTO_VERIFY_PROJECTS !== "false";
 const pollMs = Number(process.env.VERIFY_POLL_MS ?? 30000);
 const backfillCount = Number(process.env.VERIFY_BACKFILL_COUNT ?? 12);
+const verifyInitialDelayMs = Number(process.env.VERIFY_INITIAL_DELAY_MS ?? 20000);
+const verifyRetryDelayMs = Number(process.env.VERIFY_RETRY_DELAY_MS ?? 60000);
+const verifyRetryLimit = Number(process.env.VERIFY_RETRY_LIMIT ?? 5);
 const rateWindowMs = Number(process.env.APPLE_RATE_WINDOW_MS ?? 60000);
 const verifyRateLimit = Number(process.env.APPLE_VERIFY_RATE_LIMIT ?? 30);
 const vanityRateLimit = Number(process.env.APPLE_VANITY_RATE_LIMIT ?? 6);
@@ -62,6 +65,7 @@ const server = createServer(async (request, response) => {
         chainId,
         factory: factoryAddress,
         autoVerify,
+        verifierReady: Boolean(process.env.BSCSCAN_API_KEY),
         queued: [...jobs.values()].filter((job) => job.status === "queued").length,
         running: [...jobs.values()].filter((job) => job.status === "running").length,
       });
@@ -76,7 +80,6 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/verify-project") {
       limitRequest(request, "verify", verifyRateLimit);
-      requireToken(request);
       const body = await readBody(request);
       const token = normalizeAddress(body.token);
       await assertFactoryProject(token);
@@ -134,7 +137,9 @@ function queueVerify(token, source) {
     token,
     source,
     status: "queued",
+    attempts: 0,
     logs: [],
+    nextRunAt: source === "backfill" ? "" : new Date(Date.now() + verifyInitialDelayMs).toISOString(),
     updatedAt: new Date().toISOString(),
   });
   void drainVerifyQueue();
@@ -148,12 +153,22 @@ async function drainVerifyQueue() {
 
   try {
     while (true) {
-      const job = [...jobs.values()].find((item) => item.status === "queued");
+      const now = Date.now();
+      const queuedJobs = [...jobs.values()].filter((item) => item.status === "queued");
+      const job = queuedJobs.find((item) => !item.nextRunAt || Date.parse(item.nextRunAt) <= now);
       if (!job) {
+        const nextRunAt = queuedJobs
+          .map((item) => item.nextRunAt ? Date.parse(item.nextRunAt) : now)
+          .filter((time) => Number.isFinite(time))
+          .sort((left, right) => left - right)[0];
+        if (nextRunAt) {
+          setTimeout(() => void drainVerifyQueue(), Math.max(1000, nextRunAt - now));
+        }
         return;
       }
 
       job.status = "running";
+      job.nextRunAt = "";
       job.updatedAt = new Date().toISOString();
 
       try {
@@ -161,8 +176,16 @@ async function drainVerifyQueue() {
         job.status = "success";
         job.logs = logs;
       } catch (error) {
-        job.status = "error";
-        job.logs = [error instanceof Error ? error.message : String(error)];
+        const message = error instanceof Error ? error.message : String(error);
+        job.attempts = Number(job.attempts ?? 0) + 1;
+        job.logs = [message];
+        if (job.attempts < verifyRetryLimit) {
+          job.status = "queued";
+          job.nextRunAt = new Date(Date.now() + verifyRetryDelayMs * job.attempts).toISOString();
+        } else {
+          job.status = "error";
+          job.nextRunAt = "";
+        }
       }
       job.updatedAt = new Date().toISOString();
     }

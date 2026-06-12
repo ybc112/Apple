@@ -153,14 +153,30 @@ function writeArgsFile(filePath: string, args: unknown[]) {
 
 function runCommand(command: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
+    const logs: string[] = [];
     const child = spawn(command, args, {
       env: process.env,
       shell: process.platform === "win32",
-      stdio: "inherit",
     });
 
+    child.stdout.on("data", (chunk) => {
+      const text = String(chunk);
+      logs.push(text);
+      process.stdout.write(text);
+    });
+    child.stderr.on("data", (chunk) => {
+      const text = String(chunk);
+      logs.push(text);
+      process.stderr.write(text);
+    });
     child.on("exit", (code) => {
       if (code === 0) {
+        resolve();
+        return;
+      }
+
+      const output = logs.join("");
+      if (/already verified|already been verified|contract source code already verified/i.test(output)) {
         resolve();
         return;
       }
