@@ -253,7 +253,6 @@ const copy = {
       liquidity: '回流分配',
       rewards: '持币分红',
       burn: '销毁分配',
-      platformFee: '平台服务费',
       rewardThreshold: '分红门槛',
       receiver: '接收钱包',
       vault: 'Vault 地址',
@@ -268,7 +267,6 @@ const copy = {
       disabled: '关闭',
       unallocated: '未分配',
       toReceiver: (address: string) => `进入 ${shortAddress(address)}`,
-      toPlatform: () => '进入平台服务费',
       toBlackHole: '进入黑洞',
       toRewardToken: (address: string) => `指定代币 ${shortAddress(address)}`,
       toBurn: '直接销毁',
@@ -546,7 +544,6 @@ const copy = {
       liquidity: 'Buyback allocation',
       rewards: 'Holder rewards',
       burn: 'Burn allocation',
-      platformFee: 'Platform service fee',
       rewardThreshold: 'Reward threshold',
       receiver: 'Receiver wallet',
       vault: 'Vault address',
@@ -561,7 +558,6 @@ const copy = {
       disabled: 'Off',
       unallocated: 'Unallocated',
       toReceiver: (address: string) => `Sent to ${shortAddress(address)}`,
-      toPlatform: () => 'Sent to platform service fee',
       toBlackHole: 'Sent to black hole',
       toRewardToken: (address: string) => `Reward token ${shortAddress(address)}`,
       toBurn: 'Burned directly',
@@ -2234,20 +2230,12 @@ function ProjectDetailPage({
       formatTaxPortionBps(projectTaxPortion(project.buyTaxBps, splitBps)),
       formatTaxPortionBps(projectTaxPortion(project.sellTaxBps, splitBps)),
     )
-  const platformPortionPair = () =>
-    text.detail.taxPortionPair(
-      formatTaxPortionBps(platformTaxPortion(project.buyTaxBps)),
-      formatTaxPortionBps(platformTaxPortion(project.sellTaxBps)),
-    )
   const taxSummary = (taxBps: number) => {
     if (taxBps <= 0) {
       return text.detail.noTax
     }
 
     const splitSummary = [
-      ...(platformShareBps > 0
-        ? [`${text.detail.platformFee} ${formatTaxPortionBps(platformTaxPortion(taxBps))}`]
-        : []),
       `${allocation.marketing.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, marketingSplitBps))}`,
       `${allocation.liquidity.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, project.lpFeeBps))}`,
       `${allocation.rewards.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, project.dividendFeeBps))}`,
@@ -2310,12 +2298,6 @@ function ProjectDetailPage({
           />
           <DetailRow label={text.detail.buyTax} value={taxSummary(project.buyTaxBps)} />
           <DetailRow label={text.detail.sellTax} value={taxSummary(project.sellTaxBps)} />
-          {platformShareBps > 0 && (
-            <DetailRow
-              label={text.detail.platformFee}
-              value={`${platformPortionPair()} -> ${text.detail.toPlatform()}`}
-            />
-          )}
           <DetailRow
             label={text.detail.marketing}
             value={`${portionPair(marketingSplitBps)} -> ${text.detail.toReceiver(project.receiver)}`}
