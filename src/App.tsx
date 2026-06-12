@@ -2256,17 +2256,12 @@ function ProjectDetailPage({
   const splitTotal = project.fundFeeBps + project.lpFeeBps + project.dividendFeeBps + project.burnFeeBps
   const unallocatedBps = Math.max(0, 10_000 - splitTotal)
   const marketingSplitBps = project.fundFeeBps + unallocatedBps
-  const platformShareBps = Math.min(10_000, Math.max(0, project.platformFeeBps))
   const taxShare = (taxBps: number, shareBps: number) => (taxBps * shareBps) / 10_000
-  const platformTaxPortion = (taxBps: number) => taxShare(taxBps, platformShareBps)
-  const projectTaxPortion = (taxBps: number, splitBps: number) => {
-    const projectTaxBps = taxBps - platformTaxPortion(taxBps)
-    return taxShare(projectTaxBps, splitBps)
-  }
+  const visibleTaxPortion = (taxBps: number, splitBps: number) => taxShare(taxBps, splitBps)
   const portionPair = (splitBps: number) =>
     text.detail.taxPortionPair(
-      formatTaxPortionBps(projectTaxPortion(project.buyTaxBps, splitBps)),
-      formatTaxPortionBps(projectTaxPortion(project.sellTaxBps, splitBps)),
+      formatTaxPortionBps(visibleTaxPortion(project.buyTaxBps, splitBps)),
+      formatTaxPortionBps(visibleTaxPortion(project.sellTaxBps, splitBps)),
     )
   const taxSummary = (taxBps: number) => {
     if (taxBps <= 0) {
@@ -2274,10 +2269,10 @@ function ProjectDetailPage({
     }
 
     const splitSummary = [
-      `${allocation.marketing.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, marketingSplitBps))}`,
-      `${allocation.liquidity.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, project.lpFeeBps))}`,
-      `${allocation.rewards.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, project.dividendFeeBps))}`,
-      `${allocation.burn.label} ${formatTaxPortionBps(projectTaxPortion(taxBps, project.burnFeeBps))}`,
+      `${allocation.marketing.label} ${formatTaxPortionBps(visibleTaxPortion(taxBps, marketingSplitBps))}`,
+      `${allocation.liquidity.label} ${formatTaxPortionBps(visibleTaxPortion(taxBps, project.lpFeeBps))}`,
+      `${allocation.rewards.label} ${formatTaxPortionBps(visibleTaxPortion(taxBps, project.dividendFeeBps))}`,
+      `${allocation.burn.label} ${formatTaxPortionBps(visibleTaxPortion(taxBps, project.burnFeeBps))}`,
     ]
 
     return `${formatBps(taxBps)} (${splitSummary.join(' / ')})`

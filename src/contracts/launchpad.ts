@@ -772,7 +772,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
     const hasPlatformFeeShape = project.platformFeeReceiver !== undefined
     const fieldOffset = hasPlatformFeeShape ? 1 : 0
     const platformFeeReceiver = hasPlatformFeeShape ? String(project.platformFeeReceiver ?? project[5] ?? ZeroAddress) : ZeroAddress
-    const platformFeeBps = hasPlatformFeeShape ? 1000 : 0
+    const platformFeeBps = 0
     const totalSupply = BigInt(project.totalSupply ?? project[6 + fieldOffset] ?? 0)
     const mintCount = BigInt(project.mintCount ?? project[7 + fieldOffset] ?? 0)
     const hasNewProjectShape = project.whitelistMintCount !== undefined

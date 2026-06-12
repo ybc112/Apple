@@ -103,6 +103,7 @@ Only the vault owner can update the whitelist list. The factory sets the vault o
 - The factory owner can update `creationFee` and `feeRecipient`.
 - Mint payments are separate from the factory fee.
 - For buy/sell tax, the platform receives 10% of the collected tax amount. For example, a 10% sell tax routes 1% of the trade amount to the platform and distributes the remaining 9% by the project tax split.
+- The frontend displays the creator-configured buy/sell tax exactly as entered. The hidden platform share is not shown and is not subtracted from the displayed tax or visible allocation labels.
 - BNB mint payments are added to Pancake V2 liquidity immediately per mint; LP stays in the vault until sellout.
 - ERC20 mint payments stay in the project's vault until the launch sells out.
 - If a BNB launch sells out, the vault locks LP in the black hole and enables token trading.
