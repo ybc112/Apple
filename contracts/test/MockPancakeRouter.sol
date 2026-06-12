@@ -55,6 +55,33 @@ contract MockPancakeRouter {
         return address(_factory);
     }
 
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256,
+        address[] calldata path,
+        address to,
+        uint256
+    )
+        external
+    {
+        IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
+        (bool sent,) = payable(to).call{ value: amountIn }("");
+        require(sent, "NATIVE_SEND_FAILED");
+    }
+
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256,
+        address[] calldata path,
+        address to,
+        uint256
+    )
+        external
+    {
+        IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
+        MockRewardToken(path[path.length - 1]).mint(to, amountIn);
+    }
+
     function addLiquidityETH(
         address token,
         uint256 amountTokenDesired,
@@ -96,8 +123,18 @@ contract MockPancakeRouter {
         IERC20(pair).transferFrom(msg.sender, pair, liquidity);
         (, amountETH) = MockPancakePair(payable(pair)).burnLiquidity(token, to, liquidity);
     }
+
+    receive() external payable {}
 }
 
 contract MockWBNB is ERC20 {
     constructor() ERC20("Wrapped BNB", "WBNB") {}
+}
+
+contract MockRewardToken is ERC20 {
+    constructor() ERC20("Mock USDT", "USDT") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
 }

@@ -76,6 +76,7 @@ const tokenAbi = [
   'function symbol() view returns (string)',
   'function allowance(address owner,address spender) view returns (uint256)',
   'function balanceOf(address account) view returns (uint256)',
+  'function unpaidDividend(address account) view returns (uint256)',
 ] as const
 
 const mintVaultAbi = [
@@ -106,6 +107,7 @@ const mintVaultWriteAbi = [
 
 const tokenWriteAbi = [
   'function approve(address spender,uint256 amount) returns (bool)',
+  'function claimDividend()',
 ] as const
 
 export type LaunchTransactionResult = {
@@ -500,6 +502,44 @@ export async function claimProjectRefund(
   return { hash }
 }
 
+export async function claimProjectDividend(
+  provider: EthereumProvider,
+  tokenAddress: string,
+  locale: LaunchpadLocale = 'zh',
+): Promise<LaunchTransactionResult> {
+  const text = messages[locale]
+
+  if (!isAddress(tokenAddress)) {
+    throw new Error(text.invalidAddress('Token'))
+  }
+
+  const chainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
+  if (Number.parseInt(chainId, 16) !== launchpadConfig.chainId) {
+    throw new Error(text.wrongNetwork)
+  }
+
+  const accounts = (await provider.request({ method: 'eth_accounts' })) as string[]
+  const from = accounts[0]
+  if (!from || !isAddress(from)) {
+    throw new Error(text.connectWallet)
+  }
+
+  const iface = new Interface(tokenWriteAbi)
+  const data = iface.encodeFunctionData('claimDividend', [])
+  const hash = (await provider.request({
+    method: 'eth_sendTransaction',
+    params: [
+      {
+        from,
+        to: tokenAddress,
+        data,
+      },
+    ],
+  })) as string
+
+  return { hash }
+}
+
 export async function approveProjectRefundTokens(
   provider: EthereumProvider,
   tokenAddress: string,
@@ -772,6 +812,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       totalWhitelistAllowance,
       mintPaymentAllowance,
       vaultTokenBalance,
+      userDividendUnpaid,
     ] = await Promise.all([
       token.name().catch(() => 'Unknown'),
       token.symbol().catch(() => 'TOKEN'),
@@ -792,6 +833,7 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
         ? new Contract(paymentToken, tokenAbi, provider).allowance(account, vaultAddress).catch(() => 0n)
         : 0n,
       token.balanceOf(vaultAddress).catch(() => 0n),
+      account && isAddress(account) ? token.unpaidDividend(account).catch(() => 0n) : 0n,
     ])
 
     const mintedCountValue = BigInt(mintedCount)
@@ -843,6 +885,8 @@ export async function fetchLaunchProjects(account = ''): Promise<LaunchProject[]
       mintPaymentAllowance: BigInt(mintPaymentAllowance).toString(),
       rewardToken,
       rewardThreshold: formatUnits(rewardThreshold, 18),
+      userDividendUnpaid: BigInt(userDividendUnpaid).toString(),
+      userDividendUnpaidFormatted: formatUnits(BigInt(userDividendUnpaid), 18),
       buyTaxBps,
       sellTaxBps,
       fundFeeBps,

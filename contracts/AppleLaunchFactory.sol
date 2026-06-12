@@ -165,7 +165,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             ? DEFAULT_REWARD_TOKEN
             : params.rewardToken;
 
-        AppleToken launchToken = AppleToken(IAppleTokenDeployer(tokenDeployer).deploy(
+        AppleToken launchToken = AppleToken(payable(IAppleTokenDeployer(tokenDeployer).deploy(
             AppleToken.LaunchConfig({
                 name: params.name,
                 symbol: params.symbol,
@@ -188,7 +188,9 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
             }),
             address(this),
             tokenSalt
-        ));
+        )));
+
+        launchToken.setLiquidityRouter(liquidityRouter);
 
         AppleMintVault mintVault = AppleMintVault(payable(IAppleMintVaultDeployer(vaultDeployer).deploy(
             address(launchToken),

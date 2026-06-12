@@ -19,15 +19,16 @@
   - When trading opens, token ownership is automatically transferred to `0x000000000000000000000000000000000000dEaD`.
   - After trading opens, the creator can no longer change taxes, receivers, reward config, tax exemptions, or AMM pair flags.
   - Supports buy/sell tax against configured AMM pairs.
-  - Routes tax by split:
-    - 10% of the collected tax amount goes to the platform service fee receiver.
-    - Marketing goes to the project receiver.
-    - LP / buyback goes to `0x000000000000000000000000000000000000dEaD`.
-    - Holder reward goes to the dividend receiver, which defaults to the project receiver and can be changed by the token owner.
-    - Burn reduces total supply.
-    - Any unallocated tax split goes to the project receiver.
+  - Routes tax through real on-chain mechanics:
+    - Burn is executed immediately and reduces total supply.
+    - The remaining taxed tokens accumulate on the token contract.
+    - `swapBack` uses the configured Pancake V2 Router to swap platform and marketing buckets to native BNB.
+    - Marketing BNB is sent to the project receiver.
+    - Liquidity bucket swaps half to BNB, pairs it with the other half of the token bucket, calls `addLiquidityETH`, and sends the new LP tokens directly to `0x000000000000000000000000000000000000dEaD`.
+    - Dividend bucket swaps launch tokens to the configured reward token, defaults to BSC USDT, deposits it into `AppleDividendDistributor`, and holders can claim with `claimDividend()`.
+    - Any unallocated tax split is added to the marketing bucket.
   - Ownership is transferred to the project creator after launch.
-  - Token owner can update tax config, marketing receiver, dividend receiver, reward token config, tax exemptions, and AMM pairs.
+  - Token owner can update tax config, marketing receiver, dividend receiver metadata, reward threshold, tax exemptions, swap settings, distributor gas, and AMM pairs before sellout. The reward token address is locked at deployment so the distributor cannot point at a different asset later.
 
 - `AppleMintVault`
   - Holds the full token supply allocated for public mint.
@@ -131,10 +132,16 @@ The UI fields map to contract fields as follows:
 
 - `销毁` -> `burnFeeBps`
 - `营销` -> `fundFeeBps`
-- `回流` -> `lpFeeBps`, always routed to `AppleToken.LP_BLACK_HOLE()`
-- `持币分红` -> `dividendFeeBps`, routed to `dividendReceiver`
+- `回流` -> `lpFeeBps`, swapped and added as Pancake V2 liquidity, with LP sent to `AppleToken.LP_BLACK_HOLE()`
+- `持币分红` -> `dividendFeeBps`, swapped to the configured reward token and deposited into `AppleDividendDistributor`
 
 The split total can be lower than 100%. The remaining unallocated part of a charged tax goes to the project receiver. The split total cannot exceed 100%, and buy/sell tax cannot exceed 25%.
+
+Dividend claiming:
+
+- `unpaidDividend(account)` reads the current claimable reward-token amount.
+- `claimDividend()` distributes the caller's unpaid reward tokens from the distributor.
+- The frontend project detail page reads `unpaidDividend(connectedWallet)` and submits `claimDividend()` through the connected wallet.
 
 ## Auditor Design
 
@@ -229,5 +236,5 @@ Current tests cover:
 - Sold-out launches automatically lock LP, mark the pair, and enable trading.
 - Unsold launches allow buyers to refund after 24 hours by returning minted tokens and removing their LP share.
 - Regular token transfers are locked before sellout and unlocked automatically after sellout.
-- Sell tax routes LP to the black hole, burns the burn split, and routes marketing/dividend splits correctly.
+- Sell tax triggers real swapback: burn reduces supply, platform and marketing buckets swap to native BNB, liquidity bucket adds LP to the black hole, and dividend bucket swaps to reward token for holder claiming.
 - Auditor registry covers application, owner approval, approved-auditor-only review submission, review updates, and project review reads.

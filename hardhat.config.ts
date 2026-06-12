@@ -32,9 +32,17 @@ export default defineConfig({
     },
   },
   networks: {
+    default: {
+      type: "edr-simulated",
+      chainType: "l1",
+      blockGasLimit: 30_000_000,
+      transactionGasCap: 30_000_000,
+    },
     hardhatMainnet: {
       type: "edr-simulated",
       chainType: "l1",
+      blockGasLimit: 30_000_000,
+      transactionGasCap: 30_000_000,
     },
     bsc: {
       type: "http",

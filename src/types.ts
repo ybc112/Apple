@@ -92,6 +92,8 @@ export type LaunchProject = {
   mintPaymentAllowance: string
   rewardToken: string
   rewardThreshold: string
+  userDividendUnpaid: string
+  userDividendUnpaidFormatted: string
   buyTaxBps: number
   sellTaxBps: number
   fundFeeBps: number

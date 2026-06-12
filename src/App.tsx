@@ -34,6 +34,7 @@ import {
 import {
   approveProjectRefundTokens,
   approveProjectMintPayment,
+  claimProjectDividend,
   claimProjectRefund,
   createLaunchToken,
   fetchLaunchProjects,
@@ -1295,6 +1296,36 @@ function App() {
     return provider
   }
 
+  const submitProjectDividend = async (project: LaunchProject) => {
+    try {
+      const provider = await prepareWalletTransaction()
+      if (!provider) {
+        return
+      }
+
+      setNotice({
+        kind: 'info',
+        message: language === 'zh' ? '请在钱包里确认领取分红交易。' : 'Confirm the dividend claim transaction in your wallet.',
+      })
+      const result = await claimProjectDividend(provider, project.token, language)
+      setNotice({
+        kind: 'info',
+        message:
+          language === 'zh'
+            ? `领取分红交易已提交：${shortHash(result.hash)}，正在等待链上确认。`
+            : `Dividend claim submitted: ${shortHash(result.hash)}. Waiting for confirmation.`,
+      })
+      await waitForTransactionReceipt(provider, result.hash, 120_000, language)
+      setNotice({
+        kind: 'success',
+        message: language === 'zh' ? '分红已领取，项目数据已刷新。' : 'Dividend claimed. Project data refreshed.',
+      })
+      setProjectsRefreshKey((current) => current + 1)
+    } catch (error) {
+      setNotice({ kind: 'error', message: readProviderErrorMessage(error) })
+    }
+  }
+
   const submitAuditorApplication = async (profileUri: string) => {
     try {
       const provider = await prepareWalletTransaction()
@@ -1474,7 +1505,9 @@ function App() {
           openSwap={openSwap}
           projects={projects}
           projectsStatus={projectsStatus}
+          submitProjectDividend={submitProjectDividend}
           text={text}
+          wallet={wallet}
         />
       )}
       {page === 'launch' && (
@@ -2161,7 +2194,9 @@ function ProjectDetailPage({
   openSwap,
   projects,
   projectsStatus,
+  submitProjectDividend,
   text,
+  wallet,
 }: {
   initialTokenAddress: string
   language: Language
@@ -2169,9 +2204,12 @@ function ProjectDetailPage({
   openSwap: (tokenAddress?: string) => void
   projects: LaunchProject[]
   projectsStatus: ProjectsStatus
+  submitProjectDividend: (project: LaunchProject) => Promise<void>
   text: (typeof copy)[Language]
+  wallet: WalletState
 }) {
   const [copiedKey, setCopiedKey] = useState('')
+  const [dividendPending, setDividendPending] = useState(false)
   const normalizedToken = initialTokenAddress.toLowerCase()
   const project = projects.find((item) => item.token.toLowerCase() === normalizedToken)
   const allocation = allocationTranslations[language]
@@ -2245,6 +2283,11 @@ function ProjectDetailPage({
     return `${formatBps(taxBps)} (${splitSummary.join(' / ')})`
   }
   const progress = Math.min(100, Math.max(0, project.progress))
+  const unpaidDividendWei = BigInt(project.userDividendUnpaid || '0')
+  const rewardLabel = project.rewardToken.toLowerCase() === USDT_ADDRESS.toLowerCase()
+    ? 'USDT'
+    : shortAddress(project.rewardToken)
+  const dividendDisplay = `${formatDisplayAmount(project.userDividendUnpaidFormatted)} ${rewardLabel}`
 
   return (
     <main className="page detail-page">
@@ -2334,6 +2377,34 @@ function ProjectDetailPage({
             <span>
               {project.mintedCount}/{project.mintCount}
             </span>
+          </div>
+
+          <div className="detail-stat-panel dividend-claim-panel">
+            <p>{language === 'zh' ? '可领分红' : 'Claimable rewards'}</p>
+            <strong>{dividendDisplay}</strong>
+            <span>
+              {wallet.account
+                ? language === 'zh' ? '来自链上分红池' : 'From the on-chain dividend pool'
+                : language === 'zh' ? '连接钱包后读取' : 'Connect wallet to read'}
+            </span>
+            <button
+              className="submit-button"
+              type="button"
+              disabled={!wallet.account || unpaidDividendWei <= 0n || dividendPending}
+              onClick={async () => {
+                setDividendPending(true)
+                try {
+                  await submitProjectDividend(project)
+                } finally {
+                  setDividendPending(false)
+                }
+              }}
+            >
+              <Wallet size={16} />
+              {dividendPending
+                ? language === 'zh' ? '等待确认' : 'Waiting'
+                : language === 'zh' ? '领取分红' : 'Claim rewards'}
+            </button>
           </div>
 
           <div className="detail-stat-list">

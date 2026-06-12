@@ -2201,6 +2201,27 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1;
 }
 
+.dividend-claim-panel strong {
+  color: #f2fbf8;
+  font-size: 28px;
+}
+
+.dividend-claim-panel .submit-button {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 2px;
+  border-color: rgba(141, 247, 196, 0.6);
+  color: #03100b;
+  background: linear-gradient(135deg, rgba(141, 247, 196, 0.98), rgba(139, 215, 255, 0.92));
+}
+
+.dividend-claim-panel .submit-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  filter: grayscale(0.25);
+  transform: none;
+}
+
 .detail-stat-panel span {
   color: var(--muted);
   font-weight: 850;
