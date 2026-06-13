@@ -2952,6 +2952,7 @@ function LaunchPage({
     paymentTokens.find((token) => token.address.toLowerCase() === form.paymentToken.toLowerCase()) ??
     paymentTokens[0]
   const totalMintCount = Number(form.publicMintCount || 0) + Number(form.whitelistMintCount || 0)
+  const guardDurationHint = formatGuardDuration(advancedTax.launchProtectionBlocks, language)
   const advancedTaxCopy = language === 'zh'
     ? {
         title: '高级税收',
@@ -3041,7 +3042,7 @@ function LaunchPage({
                 label={text.launch.tokenSymbol}
                 placeholder={text.launch.tokenSymbolPlaceholder}
                 value={form.symbol}
-                onChange={(value) => updateForm('symbol', value.toUpperCase())}
+                onChange={(value) => updateForm('symbol', value)}
               />
             </div>
             <div className="avatar-upload">
@@ -3234,6 +3235,7 @@ function LaunchPage({
                   />
                   <InputField
                     label={advancedTaxCopy.launchProtectionBlocks}
+                    helper={guardDurationHint}
                     value={advancedTax.launchProtectionBlocks}
                     onChange={(value) => updateAdvancedTax('launchProtectionBlocks', value)}
                   />
@@ -3489,12 +3491,33 @@ function ProjectAvatar({ project, size = 'card' }: { project: LaunchProject; siz
   )
 }
 
+function formatGuardDuration(blocks: string, language: Language) {
+  const blockCount = Number(blocks || 0)
+
+  if (!Number.isFinite(blockCount) || blockCount <= 0) {
+    return language === 'zh' ? '0 表示不启用开盘保护' : '0 disables launch guard'
+  }
+
+  const seconds = Math.round(blockCount * 3)
+  if (seconds < 60) {
+    return language === 'zh' ? `约 ${seconds} 秒，按 BSC 平均 3 秒/块估算` : `About ${seconds}s at ~3s per BSC block`
+  }
+
+  const minutes = seconds / 60
+  const formatted = minutes >= 10 ? Math.round(minutes).toString() : minutes.toFixed(1).replace(/\.0$/, '')
+  return language === 'zh'
+    ? `约 ${formatted} 分钟，按 BSC 平均 3 秒/块估算`
+    : `About ${formatted} min at ~3s per BSC block`
+}
+
 function InputField({
+  helper,
   label,
   onChange,
   placeholder,
   value,
 }: {
+  helper?: string
   label: string
   onChange: (value: string) => void
   placeholder?: string
@@ -3504,6 +3527,7 @@ function InputField({
     <label className="field">
       <span>{label}</span>
       <input placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />
+      {helper && <em>{helper}</em>}
     </label>
   )
 }

@@ -1107,7 +1107,7 @@ async function toFactoryParams(draft: LaunchDraft, locale: LaunchpadLocale): Pro
 
   return {
     name: form.tokenName.trim(),
-    symbol: form.symbol.trim().toUpperCase(),
+    symbol: form.symbol.trim(),
     metadataUri: await buildMetadata(draft),
     totalSupply: parseUnits(form.supply, 18),
     mintCount: mintQuota.total,
