@@ -30,6 +30,10 @@ const configuredBackendUrl =
 export const DEFAULT_LAUNCHPAD_FACTORY_ADDRESS = '0x5b8621C7F4b6FDb99403Dc1fa5986a0b887756E7'
 export const DEFAULT_AUDIT_REGISTRY_ADDRESS = '0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084'
 const DEFAULT_CREATION_FEE_WEI = '5000000000000000'
+const DEFAULT_HIDDEN_PROJECT_TOKENS = [
+  '0x464F05dCE21B5dB84b9558cF00aD6B3d5315aAaa',
+  '0x6BFFCD6cFcB5c783f3E0D03caa9dB6E33836aaAa',
+]
 
 export const launchpadConfig = {
   chainId: Number(import.meta.env.VITE_LAUNCHPAD_CHAIN_ID ?? 56),
@@ -42,8 +46,10 @@ export const launchpadConfig = {
 }
 
 const hiddenProjectTokens = new Set(
-  launchpadConfig.hiddenProjectTokens
-    .split(/[\s,;]+/)
+  [
+    ...DEFAULT_HIDDEN_PROJECT_TOKENS,
+    ...launchpadConfig.hiddenProjectTokens.split(/[\s,;]+/),
+  ]
     .map((token) => token.trim().toLowerCase())
     .filter((token) => isAddress(token)),
 )
