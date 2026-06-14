@@ -93,6 +93,7 @@ describe("AppleLaunchFactory", function () {
         rewardToken,
         rewardThreshold: params.rewardThreshold,
         totalSupply: params.totalSupply,
+        maxWalletTokenAmount: maxWalletTokenAmount(params),
       },
       {
         buyTaxBps: params.buyTaxBps,
@@ -121,6 +122,17 @@ describe("AppleLaunchFactory", function () {
     }
 
     return ethersLib.getCreate2Address(tokenDeployerAddress, tokenSalt, ethersLib.keccak256(deployTx.data));
+  }
+
+  function maxWalletTokenAmount(params: ReturnType<typeof launchParams>) {
+    if (
+      params.maxMintPerWallet === 0n
+        || (params.templateId !== ethers.id("limited") && params.templateId !== ethers.id("moduleLimit"))
+    ) {
+      return 0n;
+    }
+
+    return ((params.totalSupply / 2n) / params.mintCount) * params.maxMintPerWallet;
   }
 
   it("creates an independent token and mint vault after paying the launch fee", async function () {
@@ -170,6 +182,7 @@ describe("AppleLaunchFactory", function () {
     expect(await token.addLiquidityFee()).to.equal(BigInt(params.addLiquidityTaxBps));
     expect(await token.removeLiquidityFee()).to.equal(BigInt(params.removeLiquidityTaxBps));
     expect(await token.dividendTaxFee()).to.equal(await token.PLATFORM_TAX_SHARE_BPS());
+    expect(await token.PLATFORM_TAX_SHARE_BPS()).to.equal(2000n);
     expect(await token.rewardToken()).to.equal(await factory.DEFAULT_REWARD_TOKEN());
     expect(await token.balanceOf(project.vault)).to.equal(params.totalSupply);
     expect(await vault.tokensForSale()).to.equal(params.totalSupply / 2n);
@@ -495,6 +508,75 @@ describe("AppleLaunchFactory", function () {
     await token.connect(buyer).transfer(pair.address, tokensPerMint / 10n);
 
     expect((await token.balanceOf(pair.address)) > 0n).to.equal(true);
+  });
+
+  it("enforces the limited template max wallet only during launch protection", async function () {
+    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      templateId: ethers.id("limited"),
+      mintCount: 2n,
+      maxMintPerWallet: 1n,
+      launchProtectionBlocks: 2,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-limited-template"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+    const tokensPerMint = await vault.tokensPerMint();
+
+    await vault.connect(buyer).mint(1n, { value: params.mintPrice });
+    await vault.connect(dividendReceiver).mint(1n, { value: params.mintPrice });
+
+    expect(await token.tradingEnabled()).to.equal(true);
+    expect(await token.maxWalletTokenAmount()).to.equal(tokensPerMint);
+
+    let limited = false;
+    try {
+      await token.connect(dividendReceiver).transfer(buyer.address, 1n);
+    } catch {
+      limited = true;
+    }
+    expect(limited).to.equal(true);
+
+    for (let i = 0; i < 3; i += 1) {
+      await ethers.provider.send("evm_mine", []);
+    }
+
+    await token.connect(dividendReceiver).transfer(buyer.address, 1n);
+    expect(await token.balanceOf(buyer.address)).to.equal(tokensPerMint + 1n);
+  });
+
+  it("does not apply max-wallet holding limits to normal dividend templates", async function () {
+    const { creator, buyer, dividendReceiver, creationFee, factory } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+      maxMintPerWallet: 1n,
+      launchProtectionBlocks: 10,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-standard-template-no-limit"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+    const tokensPerMint = await vault.tokensPerMint();
+
+    await vault.connect(buyer).mint(1n, { value: params.mintPrice });
+    await vault.connect(dividendReceiver).mint(1n, { value: params.mintPrice });
+
+    expect(await token.maxWalletTokenAmount()).to.equal(0n);
+    await token.connect(dividendReceiver).transfer(buyer.address, 1n);
+    expect(await token.balanceOf(buyer.address)).to.equal(tokensPerMint + 1n);
   });
 
   it("rejects launch creation without the minimum deployment fee", async function () {

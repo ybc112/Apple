@@ -3,7 +3,7 @@ import "dotenv/config";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { Contract, JsonRpcProvider, isAddress } from "ethers";
+import { Contract, JsonRpcProvider, id, isAddress } from "ethers";
 
 process.env.PRIVATE_KEY ??= `0x${"1".padStart(64, "0")}`;
 
@@ -51,6 +51,7 @@ const tokenConstructorArgs = [
     project.rewardToken,
     project.rewardThreshold,
     project.totalSupply,
+    maxWalletTokenAmount(project),
   ],
   [
     project.buyTaxBps,
@@ -120,6 +121,18 @@ function readDeploymentFactory() {
   } catch {
     return undefined;
   }
+}
+
+function maxWalletTokenAmount(project: any) {
+  const templateId = String(project.templateId ?? "");
+  if (
+    BigInt(project.maxMintPerWallet ?? 0) === 0n
+      || (templateId !== id("limited") && templateId !== id("moduleLimit"))
+  ) {
+    return 0n;
+  }
+
+  return ((BigInt(project.totalSupply) / 2n) / BigInt(project.mintCount)) * BigInt(project.maxMintPerWallet);
 }
 
 async function verifyOne({

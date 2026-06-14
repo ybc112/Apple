@@ -308,7 +308,9 @@ contract AppleToken is ERC20, Ownable {
 
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint16 public constant MAX_TAX_BPS = 2_500;
-    uint16 public constant PLATFORM_TAX_SHARE_BPS = 1_000;
+    uint16 public constant PLATFORM_TAX_SHARE_BPS = 2_000;
+    bytes32 public constant LIMITED_TEMPLATE_ID = keccak256("limited");
+    bytes32 public constant MODULE_LIMIT_TEMPLATE_ID = keccak256("moduleLimit");
     address public constant LP_BLACK_HOLE = 0x000000000000000000000000000000000000dEaD;
 
     string public projectUri;
@@ -341,6 +343,7 @@ contract AppleToken is ERC20, Ownable {
     uint256 public totalDividendsDeposited;
     uint256 public totalTaxBurned;
     uint256 public startTradeBlock;
+    uint256 public maxWalletTokenAmount;
 
     uint16 public buyTaxBps;
     uint16 public sellTaxBps;
@@ -362,6 +365,7 @@ contract AppleToken is ERC20, Ownable {
     error NotLaunchVault();
     error InvalidMintPayment();
     error PairAlreadySet();
+    error MaxWalletExceeded();
     error RouterAlreadySet();
     error TradingLocked();
     error VaultAlreadySet();
@@ -393,6 +397,7 @@ contract AppleToken is ERC20, Ownable {
         address rewardToken;
         uint256 rewardThreshold;
         uint256 totalSupply;
+        uint256 maxWalletTokenAmount;
     }
 
     event LaunchVaultSet(address indexed vault);
@@ -470,6 +475,7 @@ contract AppleToken is ERC20, Ownable {
         paymentToken = launchConfig.paymentToken;
         rewardToken = launchConfig.rewardToken;
         rewardThreshold = launchConfig.rewardThreshold;
+        maxWalletTokenAmount = launchConfig.maxWalletTokenAmount;
         dividendDistributor = new AppleDividendDistributor(launchConfig.rewardToken, taxConfig.claimWait);
         swapThreshold = launchConfig.totalSupply / 100_000;
         if (swapThreshold == 0) {
@@ -774,6 +780,7 @@ contract AppleToken is ERC20, Ownable {
         bool taxExemptTransfer = isTaxExempt[from] || isTaxExempt[to];
         if (zeroValueOrMintBurn || taxExemptTransfer) {
             super._update(from, to, value);
+            _enforceMaxWallet(to);
             _syncDividendShare(from);
             _syncDividendShare(to);
             _processDividends();
@@ -792,6 +799,7 @@ contract AppleToken is ERC20, Ownable {
 
         if (taxBps == 0) {
             super._update(from, to, value);
+            _enforceMaxWallet(to);
             _syncDividendShare(from);
             _syncDividendShare(to);
             _processDividends();
@@ -801,6 +809,7 @@ contract AppleToken is ERC20, Ownable {
         uint256 fee = (value * taxBps) / BPS_DENOMINATOR;
         if (fee == 0) {
             super._update(from, to, value);
+            _enforceMaxWallet(to);
             _syncDividendShare(from);
             _syncDividendShare(to);
             _processDividends();
@@ -837,6 +846,7 @@ contract AppleToken is ERC20, Ownable {
 
         uint256 netAmount = value - fee;
         super._update(from, to, netAmount);
+        _enforceMaxWallet(to);
         _syncDividendShare(from);
         _syncDividendShare(to);
         _processDividends();
@@ -931,6 +941,23 @@ contract AppleToken is ERC20, Ownable {
     function _inLaunchProtection() private view returns (bool) {
         return startTradeBlock > 0 && launchProtectionBlocks > 0
             && block.number <= startTradeBlock + launchProtectionBlocks;
+    }
+
+    function _enforceMaxWallet(address account) private view {
+        if (
+            maxWalletTokenAmount == 0 || !_inLaunchProtection()
+                || (templateId != LIMITED_TEMPLATE_ID && templateId != MODULE_LIMIT_TEMPLATE_ID)
+                || account == address(0) || account == LP_BLACK_HOLE
+                || account == address(this) || account == launchVault
+                || account == address(dividendDistributor) || isTaxExempt[account]
+                || automatedMarketMakerPairs[account]
+        ) {
+            return;
+        }
+
+        if (balanceOf(account) > maxWalletTokenAmount) {
+            revert MaxWalletExceeded();
+        }
     }
 
     function _isAddLiquidity(address pair) private view returns (bool) {
