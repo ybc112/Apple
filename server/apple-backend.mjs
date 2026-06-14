@@ -264,7 +264,6 @@ async function findVanitySalt(body) {
       rewardToken,
       rewardThreshold: params.rewardThreshold,
       totalSupply: params.totalSupply,
-      maxWalletTokenAmount: maxWalletTokenAmount(params),
     },
     {
       buyTaxBps: params.buyTaxBps,
@@ -355,17 +354,6 @@ function normalizeLaunchParams(params) {
     whitelistMintCount: BigInt(params.whitelistMintCount ?? 0),
     whitelistEnabled: Boolean(params.whitelistEnabled),
   };
-}
-
-function maxWalletTokenAmount(params) {
-  if (
-    params.maxMintPerWallet === 0n
-      || (params.templateId !== id("limited") && params.templateId !== id("moduleLimit"))
-  ) {
-    return 0n;
-  }
-
-  return ((params.totalSupply / 2n) / params.mintCount) * params.maxMintPerWallet;
 }
 
 async function assertFactoryProject(token) {

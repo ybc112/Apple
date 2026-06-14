@@ -50,8 +50,6 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint16 public constant MAX_TAX_BPS = 2_500;
     address public constant DEFAULT_REWARD_TOKEN = 0x55d398326f99059fF775485246999027B3197955;
-    bytes32 public constant LIMITED_TEMPLATE_ID = keccak256("limited");
-    bytes32 public constant MODULE_LIMIT_TEMPLATE_ID = keccak256("moduleLimit");
 
     uint256 public creationFee;
     address public feeRecipient;
@@ -207,8 +205,7 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
                 paymentToken: params.paymentToken,
                 rewardToken: rewardToken,
                 rewardThreshold: params.rewardThreshold,
-                totalSupply: params.totalSupply,
-                maxWalletTokenAmount: _maxWalletTokenAmount(params)
+                totalSupply: params.totalSupply
             }),
             AppleToken.TaxConfig({
                 buyTaxBps: params.buyTaxBps,
@@ -431,16 +428,5 @@ contract AppleLaunchFactory is Ownable, ReentrancyGuard {
                 revert InvalidFee();
             }
         }
-    }
-
-    function _maxWalletTokenAmount(LaunchParams calldata params) private pure returns (uint256) {
-        if (
-            params.maxMintPerWallet == 0
-                || (params.templateId != LIMITED_TEMPLATE_ID && params.templateId != MODULE_LIMIT_TEMPLATE_ID)
-        ) {
-            return 0;
-        }
-
-        return ((params.totalSupply / 2) / params.mintCount) * params.maxMintPerWallet;
     }
 }
