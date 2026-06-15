@@ -851,6 +851,10 @@ a {
 }
 
 .refund-state {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
   padding: 9px 11px;
   border: 1px solid rgba(104, 164, 154, 0.18);
   border-radius: var(--radius);
@@ -864,6 +868,36 @@ a {
   border-color: rgba(141, 247, 196, 0.36);
   color: var(--accent);
   background: rgba(141, 247, 196, 0.08);
+}
+
+.refund-state span {
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.refund-state .refund-button {
+  min-height: 34px;
+  padding: 0 10px;
+  border-color: rgba(141, 247, 196, 0.36);
+  color: #f5fff9;
+  background: rgba(141, 247, 196, 0.12);
+  box-shadow: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.refund-state .refund-button:disabled {
+  border-color: rgba(104, 164, 154, 0.18);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.045);
+  opacity: 1;
+}
+
+.refund-state .refund-button:disabled:hover {
+  border-color: rgba(104, 164, 154, 0.18);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.045);
+  transform: none;
 }
 
 .project-links {

@@ -249,6 +249,11 @@ const copy = {
       refund: '申请退款',
       refundAvailable: (amount: string) => `可退款 ${amount}`,
       refundTip: '24 小时未打满后可退款',
+      refundOpensIn: (time: string) => `退款将在 ${time} 后开放`,
+      refundConnectWallet: '连接参与 Mint 的钱包后可查看退款',
+      refundNoPosition: '当前钱包没有可退份额',
+      refundFinalized: '项目已打满开盘，不能退款',
+      refundLocked: '暂不可退',
     },
     detail: {
       eyebrow: '项目详情',
@@ -556,6 +561,11 @@ const copy = {
       refund: 'Claim refund',
       refundAvailable: (amount: string) => `Refundable ${amount}`,
       refundTip: 'Refunds open if not sold out after 24h',
+      refundOpensIn: (time: string) => `Refunds open in ${time}`,
+      refundConnectWallet: 'Connect the wallet that minted to check refunds',
+      refundNoPosition: 'No refundable position for this wallet',
+      refundFinalized: 'Sold out and trading is live. Refunds are closed',
+      refundLocked: 'Not available',
     },
     detail: {
       eyebrow: 'Project details',
@@ -2111,6 +2121,8 @@ function ProjectCard({
       : language === 'zh'
         ? '链上记录'
         : 'On-chain'
+  const refundStatusText = readRefundStatusText(project, wallet, progress, language, text)
+  const refundButtonDisabled = !project.canRefund || refundPending
 
   return (
     <article className="project-card">
@@ -2157,9 +2169,26 @@ function ProjectCard({
         {formatQuotaText(project, text, language)}
       </div>
       <div className={project.canRefund ? 'refund-state available' : 'refund-state'}>
-        {project.canRefund && project.userRefundAmount
-          ? text.projects.refundAvailable(project.userRefundAmount)
-          : text.projects.refundTip}
+        <span>{refundStatusText}</span>
+        <button
+          className="refund-button"
+          type="button"
+          disabled={refundButtonDisabled}
+          onClick={async () => {
+            if (refundButtonDisabled) {
+              return
+            }
+            setRefundPending(true)
+            try {
+              await submitProjectRefund(project)
+            } finally {
+              setRefundPending(false)
+            }
+          }}
+        >
+          <Wallet size={15} />
+          {project.canRefund ? (refundPending ? text.projects.whitelistPending : text.projects.refund) : text.projects.refundLocked}
+        </button>
       </div>
       {!project.finalized && progress < 100 && (
         <form
@@ -2232,23 +2261,6 @@ function ProjectCard({
           <button type="button" onClick={() => openSwap(project.token)}>
             <ArrowUpDown size={16} />
             {text.projects.trade}
-          </button>
-        )}
-        {project.canRefund && (
-          <button
-            type="button"
-            disabled={refundPending}
-            onClick={async () => {
-              setRefundPending(true)
-              try {
-                await submitProjectRefund(project)
-              } finally {
-                setRefundPending(false)
-              }
-            }}
-          >
-            <Wallet size={16} />
-            {refundPending ? text.projects.whitelistPending : text.projects.refund}
           </button>
         )}
       </div>
@@ -3934,6 +3946,70 @@ function readSwapTokenFromHash() {
 function readDetailTokenFromHash() {
   const query = window.location.hash.split('?')[1] ?? ''
   return new URLSearchParams(query).get('token') ?? ''
+}
+
+function readRefundStatusText(
+  project: LaunchProject,
+  wallet: WalletState,
+  progress: number,
+  language: Language,
+  text: (typeof copy)[Language],
+) {
+  if (project.canRefund && project.userRefundAmount) {
+    return text.projects.refundAvailable(project.userRefundAmount)
+  }
+
+  if (project.finalized || progress >= 100) {
+    return text.projects.refundFinalized
+  }
+
+  if (!wallet.account) {
+    return text.projects.refundConnectWallet
+  }
+
+  if (readBigInt(project.refundTokenAmount) <= 0n) {
+    return text.projects.refundNoPosition
+  }
+
+  const refundAt = Number(project.refundDeadline || 0) * 1000
+  if (refundAt > Date.now()) {
+    return text.projects.refundOpensIn(formatRefundCountdown(refundAt - Date.now(), language))
+  }
+
+  return text.projects.refundNoPosition
+}
+
+function readBigInt(value: string | number | bigint | undefined) {
+  try {
+    return BigInt(value ?? 0)
+  } catch {
+    return 0n
+  }
+}
+
+function formatRefundCountdown(milliseconds: number, language: Language) {
+  const minutes = Math.max(1, Math.ceil(milliseconds / 60_000))
+  const days = Math.floor(minutes / 1_440)
+  const hours = Math.floor((minutes % 1_440) / 60)
+  const mins = minutes % 60
+
+  if (language === 'zh') {
+    if (days > 0) {
+      return `${days} 天 ${hours} 小时`
+    }
+    if (hours > 0) {
+      return `${hours} 小时 ${mins} 分钟`
+    }
+    return `${mins} 分钟`
+  }
+
+  if (days > 0) {
+    return `${days}d ${hours}h`
+  }
+  if (hours > 0) {
+    return `${hours}h ${mins}m`
+  }
+  return `${mins}m`
 }
 
 function normalizeMintInput(value: string) {
