@@ -28,8 +28,8 @@ const tokenArtifact = readJson("artifacts/contracts/AppleToken.sol/AppleToken.js
 const chainId = Number(process.env.APPLE_CHAIN_ID ?? deployment.chainId ?? 56);
 const rpcUrl = process.env.BSC_RPC_URL ?? process.env.APPLE_RPC_URL ?? "https://bsc.publicnode.com";
 const factoryAddress = getAddress(
-  process.env.APPLE_FACTORY_ADDRESS
-    ?? deployment.factory
+  deployment.factory
+    ?? process.env.APPLE_FACTORY_ADDRESS
     ?? process.env.FACTORY_ADDRESS
     ?? process.env.VITE_LAUNCHPAD_FACTORY_ADDRESS,
 );
