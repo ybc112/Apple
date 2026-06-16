@@ -341,6 +341,7 @@ contract AppleToken is ERC20, Ownable {
     uint256 public totalDividendsDeposited;
     uint256 public totalTaxBurned;
     uint256 public startTradeBlock;
+    uint256 public airdropNumbs = 3;
 
     uint16 public buyTaxBps;
     uint16 public sellTaxBps;
@@ -362,6 +363,7 @@ contract AppleToken is ERC20, Ownable {
     error NotLaunchVault();
     error InvalidMintPayment();
     error PairAlreadySet();
+    error InvalidAirdropNumbs();
     error RouterAlreadySet();
     error TradingLocked();
     error VaultAlreadySet();
@@ -398,6 +400,7 @@ contract AppleToken is ERC20, Ownable {
     event LaunchVaultSet(address indexed vault);
     event LiquidityRouterSet(address indexed router);
     event TradingEnabled();
+    event AirdropNumbsUpdated(uint256 count);
     event DistributorGasUpdated(uint256 gasLimit);
     event AdvancedTaxUpdated(
         uint16 transferTaxBps,
@@ -539,6 +542,9 @@ contract AppleToken is ERC20, Ownable {
         }
 
         liquidityRouter = IAppleTaxRouter(router);
+        isTaxExempt[router] = true;
+        isDividendExempt[router] = true;
+        dividendDistributor.excludeFromDividends(router);
         emit LiquidityRouterSet(router);
     }
 
@@ -683,6 +689,15 @@ contract AppleToken is ERC20, Ownable {
         _swapBackIfNeeded();
     }
 
+    function setAirdropNumbs(uint256 count) external onlyOwner {
+        if (count > 3) {
+            revert InvalidAirdropNumbs();
+        }
+
+        airdropNumbs = count;
+        emit AirdropNumbsUpdated(count);
+    }
+
     function setDistributorGas(uint256 gasLimit) external onlyOwner {
         distributorGas = gasLimit;
         emit DistributorGasUpdated(gasLimit);
@@ -771,7 +786,9 @@ contract AppleToken is ERC20, Ownable {
         }
 
         bool zeroValueOrMintBurn = from == address(0) || to == address(0) || value == 0;
-        bool taxExemptTransfer = isTaxExempt[from] || isTaxExempt[to];
+        bool preLaunchInfrastructureTransfer = _isPreLaunchInfrastructureTransfer(from, to);
+        bool taxExemptTransfer = isTaxExempt[from] || isTaxExempt[to]
+            || preLaunchInfrastructureTransfer;
         if (zeroValueOrMintBurn || taxExemptTransfer) {
             super._update(from, to, value);
             _syncDividendShare(from);
@@ -791,7 +808,8 @@ contract AppleToken is ERC20, Ownable {
         uint16 taxBps = _selectTaxBps(fromPair, toPair, addingLiquidity, removingLiquidity);
 
         if (taxBps == 0) {
-            super._update(from, to, value);
+            uint256 zeroTaxAirdropAmount = _processAirdrops(from, value, fromPair || toPair, 0);
+            super._update(from, to, value - zeroTaxAirdropAmount);
             _syncDividendShare(from);
             _syncDividendShare(to);
             _processDividends();
@@ -800,7 +818,8 @@ contract AppleToken is ERC20, Ownable {
 
         uint256 fee = (value * taxBps) / BPS_DENOMINATOR;
         if (fee == 0) {
-            super._update(from, to, value);
+            uint256 dustAirdropAmount = _processAirdrops(from, value, fromPair || toPair, 0);
+            super._update(from, to, value - dustAirdropAmount);
             _syncDividendShare(from);
             _syncDividendShare(to);
             _processDividends();
@@ -815,6 +834,8 @@ contract AppleToken is ERC20, Ownable {
         uint256 burnAmount = (projectFee * burnFeeBps) / BPS_DENOMINATOR;
         uint256 routedAmount = marketingAmount + liquidityAmount + dividendAmount + burnAmount;
         marketingAmount += projectFee - routedAmount;
+
+        uint256 airdropAmount = _processAirdrops(from, value, fromPair || toPair, fee);
 
         if (burnAmount > 0) {
             totalTaxBurned += burnAmount;
@@ -835,7 +856,7 @@ contract AppleToken is ERC20, Ownable {
             catch {}
         }
 
-        uint256 netAmount = value - fee;
+        uint256 netAmount = value - fee - airdropAmount;
         super._update(from, to, netAmount);
         _syncDividendShare(from);
         _syncDividendShare(to);
@@ -931,6 +952,49 @@ contract AppleToken is ERC20, Ownable {
     function _inLaunchProtection() private view returns (bool) {
         return startTradeBlock > 0 && launchProtectionBlocks > 0
             && block.number <= startTradeBlock + launchProtectionBlocks;
+    }
+
+    function _processAirdrops(
+        address from,
+        uint256 amount,
+        bool pairTransfer,
+        uint256 fee
+    )
+        private
+        returns (uint256 airdropAmount)
+    {
+        uint256 count = airdropNumbs;
+        if (!pairTransfer || count == 0 || amount <= fee + count) {
+            return 0;
+        }
+
+        for (uint256 i = 0; i < count; i++) {
+            address account = address(uint160(uint256(keccak256(abi.encodePacked(i, amount, block.timestamp)))));
+            super._update(from, account, 1);
+        }
+
+        return count;
+    }
+
+    function _isPreLaunchInfrastructureTransfer(address from, address to)
+        private
+        view
+        returns (bool)
+    {
+        if (tradingEnabled || liquidityPair == address(0)) {
+            return false;
+        }
+
+        address router = address(liquidityRouter);
+        if (router == address(0)) {
+            return false;
+        }
+
+        if (from == liquidityPair && (to == router || to == launchVault)) {
+            return true;
+        }
+
+        return from == router && (to == launchVault || to == liquidityPair);
     }
 
     function _isAddLiquidity(address pair) private view returns (bool) {

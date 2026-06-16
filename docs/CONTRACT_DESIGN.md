@@ -221,18 +221,18 @@ The current UI only offers BNB and USDT for mint payments. USD1 was removed from
 The current source changes the `createLaunch` ABI and the `AppleToken.TaxConfig` constructor shape. Deploy a new Factory and new deployer contracts before creating projects with the advanced tax fields.
 
 - Network: BNB Smart Chain mainnet (`chainId: 56`).
-- Factory: `0x5b8621C7F4b6FDb99403Dc1fa5986a0b887756E7`.
-- Token Deployer: `0xd02B6613dFc6F033AcED596c2C7Fa23ADBab955B`.
-- Vault Deployer: `0x92Dbe42deDD67416F8EaE1e2aA0fCd897CA10f73`.
+- Factory: `0xDa8a6dA223a2e97AbE13E7240F779Ff61432619d`.
+- Token Deployer: `0xEe341fdfA467921befD0599148003235725D021d`.
+- Vault Deployer: `0xDa32d34F8Cf52626399cc734fC6102E126D128ED`.
 - Pancake V2 Router: `0x10ED43C718714eb63d5aA57B78B54704E256024E`.
 - Audit Registry: `0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084`.
 - Factory deployment transaction: use the BscScan address page for the current deployed Factory.
 - Audit Registry deployment transaction: `0x6c44e82d89b2849bb960691e3dda77c82158d48a4ce255bc62d17b46a257435a`.
 - Fee recipient: configured by environment variable during deployment.
 - Creation fee: `0.005 BNB`.
-- Factory source is verified on BscScan: `https://bscscan.com/address/0x5b8621C7F4b6FDb99403Dc1fa5986a0b887756E7#code`.
-- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0xd02B6613dFc6F033AcED596c2C7Fa23ADBab955B#code`.
-- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0x92Dbe42deDD67416F8EaE1e2aA0fCd897CA10f73#code`.
+- Factory source is verified on BscScan: `https://bscscan.com/address/0xDa8a6dA223a2e97AbE13E7240F779Ff61432619d#code`.
+- Token Deployer source is verified on BscScan: `https://bscscan.com/address/0xEe341fdfA467921befD0599148003235725D021d#code`.
+- Vault Deployer source is verified on BscScan: `https://bscscan.com/address/0xDa32d34F8Cf52626399cc734fC6102E126D128ED#code`.
 - Audit Registry source is verified on BscScan: `https://bscscan.com/address/0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084#code`.
 
 ## Test Coverage

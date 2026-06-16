@@ -27,7 +27,7 @@ const DEFAULT_APP_BACKEND_URL = 'https://apple-qy1h.onrender.com'
 const configuredBackendUrl =
   String(import.meta.env.VITE_APP_BACKEND_URL ?? '').trim() || DEFAULT_APP_BACKEND_URL
 
-export const DEFAULT_LAUNCHPAD_FACTORY_ADDRESS = '0x5b8621C7F4b6FDb99403Dc1fa5986a0b887756E7'
+export const DEFAULT_LAUNCHPAD_FACTORY_ADDRESS = '0xDa8a6dA223a2e97AbE13E7240F779Ff61432619d'
 export const DEFAULT_AUDIT_REGISTRY_ADDRESS = '0x236e9ea1Fba44C911ccbd0A0C8e79c02974d3084'
 const DEFAULT_CREATION_FEE_WEI = '5000000000000000'
 const DEFAULT_HIDDEN_PROJECT_TOKENS = [
@@ -37,7 +37,9 @@ const DEFAULT_HIDDEN_PROJECT_TOKENS = [
 
 export const launchpadConfig = {
   chainId: Number(import.meta.env.VITE_LAUNCHPAD_CHAIN_ID ?? 56),
-  factoryAddress: DEFAULT_LAUNCHPAD_FACTORY_ADDRESS,
+  factoryAddress:
+    String(import.meta.env.VITE_LAUNCHPAD_FACTORY_ADDRESS ?? '').trim() ||
+    DEFAULT_LAUNCHPAD_FACTORY_ADDRESS,
   creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? DEFAULT_CREATION_FEE_WEI),
   hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
   backendUrl: normalizeBackendBaseUrl(configuredBackendUrl),

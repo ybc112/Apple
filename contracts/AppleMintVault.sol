@@ -94,6 +94,11 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     error DirectNativePayment();
     error NotLaunchToken();
     error WalletMintLimitExceeded();
+    error RefundTokenBalanceTooLow(uint256 requiredAmount, uint256 availableAmount);
+    error RefundTokenAllowanceTooLow(uint256 requiredAmount, uint256 availableAmount);
+    error RefundLiquidityUnavailable();
+    error RefundLiquidityRemovalFailed();
+    error RefundPaymentUnavailable(uint256 requiredAmount, uint256 availableAmount);
 
     event Minted(
         address indexed minter,
@@ -114,6 +119,7 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
     event Refunded(address indexed account, uint256 quantity, uint256 tokenAmount, uint256 paid);
     event WhitelistEnabledUpdated(bool enabled);
     event WhitelistListUpdated(address indexed account, bool listed);
+    event LaunchForceFinalized(address indexed operator);
 
     constructor(
         address token_,
@@ -251,6 +257,20 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         }
 
         uint256 tokenAmount = tokensPerMint * quantity;
+        uint256 tokenBalance = IERC20(address(token)).balanceOf(msg.sender);
+        if (tokenBalance < tokenAmount) {
+            revert RefundTokenBalanceTooLow(tokenAmount, tokenBalance);
+        }
+
+        uint256 tokenAllowance = IERC20(address(token)).allowance(msg.sender, address(this));
+        if (tokenAllowance < tokenAmount) {
+            revert RefundTokenAllowanceTooLow(tokenAmount, tokenAllowance);
+        }
+
+        if (liquidityPair == address(0) || liquidityLpByWallet[msg.sender] == 0) {
+            revert RefundLiquidityUnavailable();
+        }
+
         uint256 whitelistQuantity = whitelistMintedByWallet[msg.sender];
         if (whitelistQuantity > quantity) {
             whitelistQuantity = quantity;
@@ -275,18 +295,30 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         IERC20(address(token)).safeTransferFrom(msg.sender, address(this), tokenAmount);
 
         _removeWalletLiquidity(msg.sender);
-        uint256 refundAmount = paid < address(this).balance ? paid : address(this).balance;
-        if (refundAmount == 0) {
-            revert NoRefund();
+        uint256 availablePayment = address(this).balance;
+        if (availablePayment < paid) {
+            revert RefundPaymentUnavailable(paid, availablePayment);
         }
 
-        (bool sent,) = payable(msg.sender).call{ value: refundAmount }("");
+        (bool sent,) = payable(msg.sender).call{ value: paid }("");
         if (!sent) {
             revert IncorrectPayment();
         }
-        refundedPayment += refundAmount;
+        refundedPayment += paid;
 
         emit Refunded(msg.sender, quantity, tokenAmount, paid);
+    }
+
+    function forceFinalizeLaunch() external onlyOwner nonReentrant {
+        if (finalized) {
+            revert LaunchAlreadyFinalized();
+        }
+        if (mintedCount == 0 || liquidityPair == address(0) || liquidityLpAmount == 0) {
+            revert RefundUnavailable();
+        }
+
+        emit LaunchForceFinalized(msg.sender);
+        _finalizeLaunch();
     }
 
     function setWhitelistEnabled(bool nextWhitelistEnabled) external onlyOwner {
@@ -508,14 +540,17 @@ contract AppleMintVault is Ownable, ReentrancyGuard {
         uint256 paymentRecovered;
         uint256 tokenBefore = IERC20(address(token)).balanceOf(address(this));
         uint256 nativeBefore = address(this).balance;
-        liquidityRouter.removeLiquidityETHSupportingFeeOnTransferTokens(
+        try liquidityRouter.removeLiquidityETHSupportingFeeOnTransferTokens(
             address(token),
             liquidity,
             0,
             0,
             address(this),
             block.timestamp
-        );
+        ) {}
+        catch {
+            revert RefundLiquidityRemovalFailed();
+        }
         tokenRecovered = IERC20(address(token)).balanceOf(address(this)) - tokenBefore;
         paymentRecovered = address(this).balance - nativeBefore;
         liquidityAddedNative = liquidityAddedNative >= paymentRecovered

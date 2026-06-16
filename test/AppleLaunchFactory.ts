@@ -328,6 +328,56 @@ describe("AppleLaunchFactory", function () {
     expect(await ethers.provider.getBalance(project.vault)).to.equal(0n);
   });
 
+  it("lets the creator force finalize an unsold launch after liquidity exists", async function () {
+    const { creator, buyer, pair, creationFee, factory, router } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 10n,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-force-finalize"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    await vault.connect(buyer).mint(1n, { value: params.mintPrice });
+
+    let nonOwnerBlocked = false;
+    try {
+      await vault.connect(pair).forceFinalizeLaunch();
+    } catch {
+      nonOwnerBlocked = true;
+    }
+    expect(nonOwnerBlocked).to.equal(true);
+
+    const pairAddress = await getLiquidityPair(router, tokenAddress);
+    const pairContract = await ethers.getContractAt("MockPancakePair", pairAddress);
+    const lockedLp = await vault.liquidityLpAmount();
+
+    await vault.connect(creator).forceFinalizeLaunch();
+
+    expect(await vault.finalized()).to.equal(true);
+    expect(await token.tradingEnabled()).to.equal(true);
+    expect(await token.owner()).to.equal(await token.LP_BLACK_HOLE());
+    expect(await vault.owner()).to.equal(await vault.PERMISSION_BLACK_HOLE());
+    expect(await token.balanceOf(project.vault)).to.equal(0n);
+    expect(await pairContract.balanceOf(await vault.PERMISSION_BLACK_HOLE())).to.equal(lockedLp);
+
+    await increaseTime(24 * 60 * 60 + 1);
+    await token.connect(buyer).approve(project.vault, await vault.tokensPerMint());
+    let refundBlocked = false;
+    try {
+      await vault.connect(buyer).claimRefund();
+    } catch {
+      refundBlocked = true;
+    }
+    expect(refundBlocked).to.equal(true);
+  });
+
   it("finalizes the launch, enables trading, adds Pancake liquidity, and burns LP when sold out", async function () {
     const { creator, buyer, dividendReceiver, creationFee, factory, router } = await deployFactory();
     const params = {
@@ -800,9 +850,10 @@ describe("AppleLaunchFactory", function () {
     const buyerUnpaid = await token.unpaidDividend(buyer.address);
     const buyerRewardBalance = await rewardToken.balanceOf(buyer.address);
     const distributorRewardBalance = await rewardToken.balanceOf(distributorAddress);
+    const airdropAmount = await token.airdropNumbs();
 
     expect((await token.balanceOf(pairAddress)) - pairTokenBefore).to.equal(
-      transferAmount - burnAmount,
+      transferAmount - burnAmount - airdropAmount,
     );
     expect((await ethers.provider.getBalance(owner.address)) - platformBefore).to.equal(platformAmount);
     expect((await ethers.provider.getBalance(creator.address)) - marketingBefore).to.equal(marketingAmount);
@@ -854,6 +905,7 @@ describe("AppleLaunchFactory", function () {
     const pairAddress = await getLiquidityPair(router, tokenAddress);
     const transferAmount = ethers.parseUnits("1000", 18);
     const fee = (transferAmount * BigInt(params.sellTaxBps)) / 10000n;
+    const airdropAmount = await token.airdropNumbs();
     const pairTokenBefore = await token.balanceOf(pairAddress);
 
     await token.connect(buyer).approve(await router.getAddress(), transferAmount);
@@ -865,9 +917,49 @@ describe("AppleLaunchFactory", function () {
       0,
     );
 
-    expect((await token.balanceOf(pairAddress)) - pairTokenBefore).to.equal(transferAmount - fee);
+    expect((await token.balanceOf(pairAddress)) - pairTokenBefore).to.equal(transferAmount - fee - airdropAmount);
     expect(await token.balanceOf(await token.getAddress())).to.equal(fee);
     expect((await token.tokensForPlatform()) + (await token.tokensForDividends())).to.equal(fee);
+  });
+
+  it("adds configurable automatic dust airdrops on pool transfers", async function () {
+    const { creator, buyer, creationFee, factory, router } = await deployFactory();
+    const params = {
+      ...launchParams(creator.address),
+      mintCount: 2n,
+      buyTaxBps: 0,
+      sellTaxBps: 0,
+      transferTaxBps: 0,
+    };
+
+    await factory
+      .connect(creator)
+      .createLaunch(params, ethers.id("salt-airdrop"), { value: creationFee });
+
+    const tokenAddress = await factory.allTokens(0);
+    const project = await factory.projects(tokenAddress);
+    const token = await ethers.getContractAt("AppleToken", tokenAddress);
+    const vault = await ethers.getContractAt("AppleMintVault", project.vault);
+
+    expect(await token.airdropNumbs()).to.equal(3n);
+
+    let invalidAirdropBlocked = false;
+    try {
+      await token.connect(creator).setAirdropNumbs(4n);
+    } catch {
+      invalidAirdropBlocked = true;
+    }
+    expect(invalidAirdropBlocked).to.equal(true);
+
+    await token.connect(creator).setAirdropNumbs(2n);
+    await vault.connect(buyer).mint(params.mintCount, { value: params.mintPrice * params.mintCount });
+
+    const pairAddress = await getLiquidityPair(router, tokenAddress);
+    const transferAmount = ethers.parseUnits("1000", 18);
+    const pairTokenBefore = await token.balanceOf(pairAddress);
+    await token.connect(buyer).transfer(pairAddress, transferAmount);
+
+    expect((await token.balanceOf(pairAddress)) - pairTokenBefore).to.equal(transferAmount - 2n);
   });
 
   it("lets BscScan-style token mint buttons forward the real minter to the vault", async function () {
@@ -1043,7 +1135,9 @@ describe("AppleLaunchFactory", function () {
     );
 
     const pairAddress = await getLiquidityPair(router, tokenAddress);
-    expect(await token.balanceOf(pairAddress)).to.equal((await vault.liquidityAddedToken()) + addAmount - fee);
+    expect(await token.balanceOf(pairAddress)).to.equal(
+      (await vault.liquidityAddedToken()) + addAmount - fee - (await token.airdropNumbs()),
+    );
     expect(await token.balanceOf(await token.getAddress())).to.equal(fee);
   });
 

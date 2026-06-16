@@ -206,8 +206,15 @@ contract MockPancakeRouter {
         returns (uint256 amountETH)
     {
         address pair = _factory.getPair(token, WETH);
+        uint256 tokenBefore = IERC20(token).balanceOf(address(this));
+        uint256 nativeBefore = address(this).balance;
         IERC20(pair).transferFrom(msg.sender, pair, liquidity);
-        (, amountETH) = MockPancakePair(payable(pair)).burnLiquidity(token, to, liquidity);
+        MockPancakePair(payable(pair)).burnLiquidity(token, address(this), liquidity);
+        uint256 tokenReceived = IERC20(token).balanceOf(address(this)) - tokenBefore;
+        amountETH = address(this).balance - nativeBefore;
+        IERC20(token).transfer(to, tokenReceived);
+        (bool sent,) = payable(to).call{ value: amountETH }("");
+        require(sent, "NATIVE_SEND_FAILED");
         MockPancakePair(payable(pair)).sync(WETH);
     }
 
