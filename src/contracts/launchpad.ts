@@ -37,9 +37,7 @@ const DEFAULT_HIDDEN_PROJECT_TOKENS = [
 
 export const launchpadConfig = {
   chainId: Number(import.meta.env.VITE_LAUNCHPAD_CHAIN_ID ?? 56),
-  factoryAddress:
-    String(import.meta.env.VITE_LAUNCHPAD_FACTORY_ADDRESS ?? '').trim() ||
-    DEFAULT_LAUNCHPAD_FACTORY_ADDRESS,
+  factoryAddress: DEFAULT_LAUNCHPAD_FACTORY_ADDRESS,
   creationFeeWei: String(import.meta.env.VITE_LAUNCHPAD_CREATION_FEE_WEI ?? DEFAULT_CREATION_FEE_WEI),
   hiddenProjectTokens: String(import.meta.env.VITE_HIDDEN_PROJECT_TOKENS ?? ''),
   backendUrl: normalizeBackendBaseUrl(configuredBackendUrl),
