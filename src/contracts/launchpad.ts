@@ -23,7 +23,7 @@ const configuredVanitySuffix = String(import.meta.env.VITE_VANITY_SUFFIX ?? '')
   .trim()
   .replace(/^0x/i, '')
   .toLowerCase()
-const DEFAULT_APP_BACKEND_URL = 'https://apple-qy1h.onrender.com'
+const DEFAULT_APP_BACKEND_URL = 'https://xueshutools.cn/apple-api'
 const configuredBackendUrl =
   String(import.meta.env.VITE_APP_BACKEND_URL ?? '').trim() || DEFAULT_APP_BACKEND_URL
 
